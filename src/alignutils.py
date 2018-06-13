@@ -7,11 +7,13 @@ def get_aligned_sentences(metafile, slug, level1, level2, auto=True): Return ali
 from newselautil import *
 import classpaths as path
 import numpy
+import re
 
 
 class Alignment(object):
 
     """ a class that represents an alignment """
+    FILL = "@IGNORE"
 
     def __init__(self, sent0, ind0, p_ind0, s_ind0, part0,
                  sent1, ind1, p_ind1, s_ind1, part1):
@@ -27,13 +29,15 @@ class Alignment(object):
         Parts are separated by semicolons, i.e. sent0.split(';')[part0] is what
         was actually aligned by the algorithm
         :param sent1: same for the second article
-        :param ind1:
+        :param ind1:[idx[0]
         :param p_ind1:
         :param s_ind1:
         :param part1:
         """
         self.sent0 = sent0
         self.sent1 = sent1
+        # self.sent0 = sent0.split(';')[part0]
+        # self.sent1 = sent1.split(';')[part1]
         self.part0 = part0
         self.part1 = part1
         self.ind0 = ind0
@@ -42,6 +46,27 @@ class Alignment(object):
         self.s_ind1 = s_ind1
         self.p_ind0 = p_ind0
         self.p_ind1 = p_ind1
+
+    def mark_simplified(self):
+        """
+        Analyze the alignment and compare the original sentence with the 
+        simplified version
+        :return: a list of tokens (words) that together form the original
+                 sentence. Tokens surrounded with '_' signs were simplified
+                 by the authors of newsela corpus 
+        """
+        simple_sentence = [x.lower() for x in tokenize(self.sent1)]
+        new_s = []
+        for w in tokenize(self.sent0):
+            lw = w.lower()
+            if lw == '':
+                new_s.append(Alignment.FILL)
+            elif lw not in simple_sentence:  # not found, which means that
+		# it probably was simplified
+                new_s.append('_' + w + '_')
+            else:
+                new_s.append(w)
+        return new_s
 
 
 def get_lowest_element_with_slug(slug, metafile):
@@ -83,22 +108,24 @@ def replace(threeDimArray, old, new):
                 if oneDim[i] == old:
                     oneDim[i] == new
 
-def get_aligned_sentence_strings(metafile, slug, level1, level2, auto=True):
+
+"""def get_aligned_sentence_strings(metafile, slug, level1, level2, auto=True):
     '''
     Returns list of list of matching substrings, each is one match across
     specified levels.
     '''
-    sentpairs = get_aligned_sentences(metafile,slug,level1,level2,auto)
-    sstringpairs = [ ] # sentence-string pairs
+    sentpairs = get_aligned_sentences(metafile, slug, level1, level2, auto)
+    sstringpairs = []  # sentence-string pairs
     for alignment in sentpairs:
         a0 = alignment.sent0.split(';')[alignment.part0]
         a1 = alignment.sent1.split(';')[alignment.part1]
-        sstringpairs.append( [a0,a1] )
-    return sstringpairs
-    
+        sstringpairs.append([a0, a1])
+    return sstringpairs"""
+
+
 def get_aligned_sentences(metafile, slug, level1, level2, auto=True):
     """
-    Returns the list of Alignment objects.
+    Returns the list of Alignment objects sorted by the absolute index.
     :param metafile:        the metafile loaded with newselautils.loadMetafile()
     :param slug:            the slug of the aligned articles
     :param level1:          the lower level of the alignment
@@ -194,9 +221,11 @@ def get_aligned_sentences(metafile, slug, level1, level2, auto=True):
                 i += 1
     # result accounts for N-1, N-N and 1-N alignments. new_result does not
     new_result = []
-    for x in result:
-        new_result += x
-    return new_result
+    for block in result:
+        if len(block) == 1 and len(block[0].sent0.split(';')) == 1:
+            # TODO fix n to 1 and n to n alignment
+            new_result += block
+    return sorted(new_result, key=lambda smth: smth.ind0, reverse=False)
 
 
 def convert_coordinates(old,pars):
@@ -215,15 +244,10 @@ def convert_coordinates(old,pars):
     return old[0], i, old[1]-pars[old[0]][i][1]
 
 
-
-
-
-
-
 if __name__ == "__main__":
     """Example use of get_aligned_sentences"""
     metafile = loadMetafile()
-    sentpairs = get_aligned_sentences(metafile, "10dollarbill-woman", 0, 1)
+    sentpairs =  (metafile, "boston-olympicbid", 0, 1)
     for alignment in sentpairs:
         if alignment.sent0 != alignment.sent1:
             print("FIRST-SENTENCE:" + str(alignment.ind0) + ':' + str(

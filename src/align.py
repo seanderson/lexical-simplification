@@ -1,5 +1,4 @@
 """
-Trying to edit the file
 Implements the algorithm described by Gustavo Herique Paetzold and Lucia Specia
 in "Vicinity-Driven Paragraph and Sentence Alignment for Comparable Corpora", University of Sheffield, UK.
 
@@ -1025,4 +1024,4 @@ if __name__ == "__main__":
     # align_first_n()
     # align_particular(["boston-timecapsule", "aztec-discovery", "fed-dollars", "africa-lions",  "haitian-migrants"])
     # align_particular(["cat-apathy"],[(0,3,2)])
-    align_first_n()
+    align_first_n(levels=[(0, 1, 3)])

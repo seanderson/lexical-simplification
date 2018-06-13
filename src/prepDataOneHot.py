@@ -1,5 +1,6 @@
-# Prepare newsela sentences at a single level for
-# input into an RNN
+# Prepare newsela sentences at a single level for input into an RNN
+# This version assumes words are represented by one-hot vectors,
+# therefore bypassing most details of vector construction.
 
 from globdefs import *
 import newselautil as ns
@@ -168,6 +169,28 @@ def build_w2v_lexicon(outfile="lex.pbz2",vocabsize=5000,art_subset=""):
     with bz2.BZ2File(outfile,'w') as fd:
         pickle.dump(vecs,fd)
 
+def build_lexicon(outfile="lexNovec.pbz2",vocabsize=5000,art_subset=""):
+    '''Create and store lexicon of vocabsize words in the newsela articles
+    levels 1 to 4 (train).'''
+
+    pars = getParagraphs( [1,2,3,4], list(range(0,13)) , art_subset )
+    lex = list()
+    # pars is list of paragraphs
+    # each par is list of strings (sentences).
+    for p in pars:
+        for s in p:
+            words = ns.tokenize(s)
+            for w in words:
+                lex.append(w)
+    word_freq = nltk.FreqDist(lex)
+    print "Lex size %d" % (len(lex))
+    print("Found %d unique word tokens." % len(word_freq.items()))
+    # Get the most common words and build index_to_word and word_to_index vectors
+    vocab = sorted(word_freq.items(), key=lambda x: (x[1], x[0]), reverse=True)
+    with bz2.BZ2File(outfile,'w') as fd:
+        pickle.dump(vocab,fd)
+
+
 def create_sentences(pars,word_to_index):
     '''Return list of all sentences, mapping words to vector index and
     dealing with sentencestart/unknown/numeric words.  Also returns
@@ -230,9 +253,9 @@ def createTestData(intrainfile,outtestfile,idxfile,artSubset=''):
     '''
     # Use training vocabulary for testing data
     with bz2.BZ2File(intrainfile,'r') as handle:
-        (invoc,vecs,sentences) = pickle.load(handle)
+        (invoc,sentences) = pickle.load(handle)
     sentences = None
-    print "Vocab vector dimensions", vecs.shape
+
     #sys.exit(1)
     # Map from key position to vector
     word_to_index = dict([(w, i) for i, w in enumerate(invoc)])
@@ -243,9 +266,32 @@ def createTestData(intrainfile,outtestfile,idxfile,artSubset=''):
     write_index_file(idxfile,filenames,numpars,sindexlst)
             
     with bz2.BZ2File(outtestfile,'w') as fd:
-        pickle.dump( (invoc,vecs,all_sents) , fd)
+        pickle.dump( (invoc,all_sents) , fd)
 
 
+
+def createValidationData(intrainfile,outtestfile,idxfile,artSubset=''):
+    '''Create training data for newsela articles using
+    word2vec embeddings for words.
+    '''
+    # Use training vocabulary for testing data
+    with bz2.BZ2File(intrainfile,'r') as handle:
+        (invoc,sentences) = pickle.load(handle)
+    sentences = None
+
+    # Map from key position to vector
+    word_to_index = dict([(w, i) for i, w in enumerate(invoc)])
+
+    filenames,numpars,pars = getParagraphsFiles( [1,2,3,4], list(range(2,10)), artSubset ) # test subset, excluding Grade 12 and Level 0
+
+    all_sents,sindexlst = create_sentences(pars,word_to_index)
+    write_index_file(idxfile,filenames,numpars,sindexlst)
+            
+    with bz2.BZ2File(outtestfile,'w') as fd:
+        pickle.dump( (invoc,all_sents) , fd)
+
+
+        
 def add_special_wordvecs(wordvecs,keys,invoc,outvoc):
     '''
     keys all words in w2v vocab
@@ -255,12 +301,6 @@ def add_special_wordvecs(wordvecs,keys,invoc,outvoc):
     All special words not in invoc have unique one-hot vectors added.
     They are at beginning of returned vecs.
     '''
-    # Create special vectors for special words NOT in invoc
-    special_subset = [ ]
-    for w in SPECIAL_WORDS:
-        if w not in invoc:
-            special_subset.append(w)
-    print 'Special words', special_subset
 
     invoc = special_subset + invoc
     num_special = len(special_subset)
@@ -275,39 +315,29 @@ def add_special_wordvecs(wordvecs,keys,invoc,outvoc):
         vecs[num_special:,i] = wordvecs[invoc[i]]
     return invoc,vecs
 
-def createTrainData(word2vecfile='data/word2vecLexicon5000.pbz2', outfile = 'NewselaSimpleXX.pbz2',artSubset=''):
+def createTrainData(vocfile='data/LexiconOneHotAll.pbz2', outfile = 'NewselaSimpleXX.pbz2',artSubset='',lexsize=0):
     '''Create training data for newsela articles using
-    word2vec embeddings for words.
+    one-hot word vectors.
     '''
 
-    with bz2.BZ2File(word2vecfile,'r') as infile:
-        wordvecs = pickle.load(infile)
-    keys = sorted(wordvecs.keys())
-    print "Loaded word2vec lexicon %d keys" % len(keys)
+    with bz2.BZ2File(vocfile,'r') as infile:
+        lex = pickle.load(infile)
+    print "Loaded lexicon %d words" % len(lex)
+    voc = map( lambda x: x[0], lex[:lexsize])
+    # Create special vectors for special words NOT in invoc
+    special_subset = [ ]
+    for w in SPECIAL_WORDS[::-1]: # critical to get UNK in position zero
+        if w not in voc:
+            voc.insert(0,w)
+    print "Final vocab size: %d" % len(voc)
 
-    invoc = [ ] # newsela words found in vocabulary
-    outvoc = [ ] # newsela words not in vocab
-    for k in keys: # Count those words found in w2vec
-        if isinstance(wordvecs[k],str): # no vector
-            outvoc.append(k)
-        else:
-            invoc.append(k)
-
-    print 'total vocab', len(keys)
-    print 'words found', len(invoc)
-    print 'words not found', len(outvoc)
-    #for x in outvoc:
-    #    print x.encode('utf-8')
-
-    invoc,vecs = add_special_wordvecs(wordvecs,keys,invoc,outvoc)
-    
     # Map from key position to vector
-    word_to_index = dict([(w, i) for i, w in enumerate(invoc)])
+    word_to_index = dict([(w, i) for i, w in enumerate(voc)])
     pars = getParagraphs( [1,2,3,4], list(range(2,10)),artSubset )
     all_sents,sentenceindex = create_sentences(pars,word_to_index)
 
     with bz2.BZ2File(outfile,'w') as fd:
-        pickle.dump( (invoc,vecs,all_sents) , fd)
+        pickle.dump( (voc,all_sents) , fd)
 
 def testTrain():
     with bz2.BZ2File('NewselaSimple01.pbz2','r') as fd:
@@ -341,29 +371,38 @@ def main():
     #        print w.encode('utf-8')
     
 
-    buildType = "NoOverlap" # "Debug"
-    if buildType == "Debug":
+    buildType = "NoOverlapRaw" # "DebugRaw"
+    if buildType == "DebugRaw":
         lexsize = "1000"
         trainSubset = 'data/trainArticleSubset.txt'
         testSubset = 'data/testArticleSubset.txt'
-        w2vFile = 'data/word2vecLexicon'+lexsize+'.pbz2'
+        vocFile = 'data/LexiconOneHot'+lexsize+'.pbz2'
         trainFile = 'data/train/'+buildType+'Train.pbz2'
         testFile = 'data/test/'+buildType+'Test.pbz2'
+        validFile = 'data/train/'+buildType+'Valid.pbz2'
         idxFile = 'data/test/'+buildType+'Test.pbz2'
         idxFile = 'data/test/DebugTest.idx'
-    elif buildType == "NoOverlap":
+        idxValidFile = 'data/train/DebugValid.idx'
+    elif buildType == "NoOverlapRaw": # no word2vec embedding
         lexsize = "19560"
+        #lexsize = "1000"
         trainSubset = 'data/trainArticles.txt'
         testSubset = 'data/testArticles.txt'
-        w2vFile = 'data/word2vecLexicon'+lexsize+'.pbz2'
+        vocFile = 'data/LexiconOneHotAll.pbz2'
         trainFile = 'data/train/'+buildType+'Train.pbz2'
         testFile = 'data/test/'+buildType+'Test.pbz2'
+        validFile = 'data/train/'+buildType+'Valid.pbz2'
         idxFile = 'data/test/'+buildType+'Test.idx'
+        idxValidFile = 'data/train/'+buildType+'Valid.idx'
     else:
         sys.exit(1)
-    build_w2v_lexicon(w2vFile,int(lexsize),trainSubset)
-    createTrainData(w2vFile,trainFile,trainSubset)
+
+    # One Hot vocab vectors
+    build_lexicon(vocFile,int(lexsize),trainSubset)
+    
+    createTrainData(vocFile,trainFile,trainSubset,int(lexsize))
     createTestData(trainFile,testFile,idxFile,testSubset)
+    createValidationData(trainFile,validFile,idxValidFile,testSubset) # validatio
     #filenames,numpars,sindexlst = read_index_file("./data/test/NewselaSimple03test.idx")
     #write_index_file("./foo.idx",filenames,numpars,sindexlst)
     #createTestData()
@@ -385,3 +424,10 @@ if __name__ == "__main__":
     #printSentenceData('data/test/DebugTest.pbz2')
     #printSentenceData('data/test/NoOverlapTest.pbz2')
     #printPars()
+    
+    # Use training vocabulary for testing data
+    #nnetfile = "./data/test/NoOverlapTest.pbz2"
+    #with bz2.BZ2File(nnetfile,'r') as handle:
+    #    (invoc,vecs,sentences) = pickle.load(handle)
+    #for s in sentences:
+    #    print 'sent:',"\t".join( [invoc[y] for y in s][1:] )

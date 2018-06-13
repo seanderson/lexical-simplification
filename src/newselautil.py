@@ -7,20 +7,21 @@ import re
 import string
 import csv
 import nltk.data
-#import regex as re
+# import regex as re
 import classpaths as path
 from nltk.tokenize import TreebankWordTokenizer
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import wordnet
 
 from nltk.corpus import stopwords
+
 STOPWORDS = stopwords.words('english')
 STOPWORDS.append("`s")  # TODO: Should this really be appended?
 STOPWORDS.append("n`t")
 for i in range(len(STOPWORDS) - 2):
     STOPWORDS.append(STOPWORDS[i][0].capitalize() + STOPWORDS[i][1:])
 
-HDR = ['title', 'filename', 'grade_level', 'language',  'version', 'slug']
+HDR = ['title', 'filename', 'grade_level', 'language', 'version', 'slug']
 Tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
 Wordtokenizer = TreebankWordTokenizer()
 Lemmatizer = WordNetLemmatizer()
@@ -32,7 +33,7 @@ def loadMetafile():
     numArticles = 0
     enArticles = 0
     articles = []  # all articles
-    with open(path.METAFILE,'r') as meta:
+    with open(path.METAFILE, 'r') as meta:
         reader = csv.DictReader(meta, delimiter=',')
         for row in reader:
             numArticles += 1
@@ -70,6 +71,8 @@ OTHER_HEADERS = '(SEATTLE - |NEW YORK - |WASHINGTON - |BEIJING - |CHICAGO - |' \
                 'DAKAR , Senegal - |PARIS - |PARIS , France - ' \
                 'WASHINGTON , D.C. - |RIYADH - |SAN FRANCISCO , Calif. - |' \
                 'CAIRO - |CHICAGO , Ill. - )'
+
+
 # these are headers that are different to detect otherwise
 
 
@@ -79,9 +82,9 @@ def modify_the_header(line):
     :param line: the line to modify
     :return: the modified line
     """
-    line = re.sub('### PRO : ', '', line)
+    # line = re.sub('### PRO : ', '', line)
     line = re.sub('<.*> ', '', line)
-    line = re.sub('### PRO : ', '', line)
+    # line = re.sub('### PRO : ', '', line)
     if line.split(' ')[0] not in CAPITALIZED_WORDS:
         line = re.sub('^[A-Z][A-Z\-.]* .*?-- ', '', line)
         line = re.sub('^' + OTHER_HEADERS, '', line)
@@ -104,22 +107,26 @@ def getTokParagraphs(article, separateBySemicolon=True, MODIFY_HEADER=True):
     PARPREFIX = "@PGPH "  # Delimits paragraphs in FILE.tok
     pars = []
     slist = []
-    with io.open(path.BASEDIR + '/articles/' + article['filename']+SUFFIX,
+    with io.open(path.BASEDIR + '/articles/' + article['filename'] + SUFFIX,
                  mode='r', encoding='utf-8') as fd:
         lines = fd.readlines()
         if MODIFY_HEADER:
             lines[1] = modify_the_header(lines[1])
-        for i in range(len(lines)):
+        i = 0
+        while i < len(lines):
+            if lines[i][0] == "#":
+                del lines[i]
+                continue
             if separateBySemicolon:
                 phrases = lines[i].split(";")
                 for phrase in phrases:
                     if phrase[0:len(PARPREFIX)] == PARPREFIX:  # new paragraph
-                        cleaned=cleanSentences(slist)
+                        cleaned = cleanSentences(slist)
                         if len(cleaned) > 0:
                             pars.append(cleaned)
                             slist = []
                     else:
-                        slist.append( phrase.rstrip('\n'))
+                        slist.append(phrase.rstrip('\n'))
             else:
                 if lines[i][0:len(PARPREFIX)] == PARPREFIX:
                     # without considering ";" to be a delimiter
@@ -129,6 +136,7 @@ def getTokParagraphs(article, separateBySemicolon=True, MODIFY_HEADER=True):
                         slist = []
                 else:
                     slist.append(lines[i].rstrip('\n'))
+            i += 1
         cleaned = cleanSentences(slist)
         if len(cleaned) > 0:
             pars.append(cleaned)
@@ -177,21 +185,52 @@ def lemmatize(s):
     return lemmas
 
 
+AFTER_APOSTROPHE = ('ve', 's', 're', 'nt', 'll', 'd', 'm', 'n')
+SPECIAL_CASES = ('o', 'O', 'l')
+REGEX_FOR_CONTRACTIONS = re.compile(' (' + '|'.join(AFTER_APOSTROPHE) + ') ')
+
+
+def merge_contractions(list_of_tokens):
+    """
+    Merges single ` tokens with the other letters that make up the contraction
+    :param list_of_tokens:
+    :return: list_of_tokens with contractions recontracted
+        (eg: does, n, `, t -> does, n't or I, `, ll -> I, `ll)
+    """
+    # print(list_of_tokens)
+    i = 0
+    while i < len(list_of_tokens) - 1:
+        if list_of_tokens[i] == "`":
+            if list_of_tokens[i + 1] in AFTER_APOSTROPHE:
+                list_of_tokens = list_of_tokens[:i] + ["`" + list_of_tokens[i + 1]] + list_of_tokens[i + 2:]
+            elif i!=0 and list_of_tokens[i - 1] == 'n' and list_of_tokens[i+1] == "t":
+                list_of_tokens = list_of_tokens[:i-1] + ["n`t"] + list_of_tokens[i + 2:]
+            elif i!=0 and list_of_tokens[i - 1] in SPECIAL_CASES:
+                list_of_tokens = list_of_tokens[:i-1] + [list_of_tokens[i-1]+"`"+list_of_tokens[i+1]] +list_of_tokens[i+2:]
+                i-=1
+        i += 1
+    return list_of_tokens
+
+
 def tokenize(s):
-    '''
+    """
     Convert sentence string to list of word tokens.  Breaks on hyphens, too.
-    '''
-    tokens = [ ]
+    """
+    s = REGEX_FOR_CONTRACTIONS.sub(r'\1 ', s)
+    s = re.sub(r"n (['`]) t", "n't", s)
+    tokens = []
     DASH = "-"
-    LOCBYLINE = "--" # location often at head of article
+    LOCBYLINE = "--"  # location often at head of article
     COLON = ":"
-    for w in Wordtokenizer.tokenize(s):
-        if w == LOCBYLINE: # replace byline with colon
+    tokenized = Wordtokenizer.tokenize(s)
+    for w in tokenized:
+        if w == LOCBYLINE:  # replace byline with colon
             tokens.append(COLON)
         elif DASH in w:
             subword = w.split(DASH)
             for x in subword:
-                if len(x) > 0 and DASH not in x: tokens.append(x) # omit mutliple dashes/hyphens.
+                if len(x) > 0 and DASH not in x:
+                    tokens.append(x)  # omit mutliple dashes/hyphens.
         else:
             tokens.append(w)
-    return tokens
+    return merge_contractions(tokens)

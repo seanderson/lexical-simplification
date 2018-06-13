@@ -16,7 +16,7 @@ import operator
 import io
 import array
 from datetime import datetime
-from gru_theano import GRUTheano
+from gru_theano_embed import GRUTheano
 import cPickle as pickle
 
 
@@ -182,13 +182,13 @@ def save_model_parameters_theano(model, outfile):
         c=model.c.get_value())
     print "Saved model parameters to %s." % outfile
 
-def load_model_parameters_theano(path, modelClass=GRUTheano):
+def load_model_parameters_theano(path, modelClass=GRUTheano,wordEmbed=None):
     npzfile = np.load(path)
     E, U, W, V, b, c = npzfile["E"], npzfile["U"], npzfile["W"], npzfile["V"], npzfile["b"], npzfile["c"]
     hidden_dim, word_dim,output_dim = E.shape[0], E.shape[1], V.shape[0]
     print "Building model model from %s with hidden_dim=%d word_dim=%d output_dim=%d" % (path, hidden_dim, word_dim, output_dim)
     sys.stdout.flush()
-    model = modelClass(word_dim, hidden_dim=hidden_dim,output_dim=output_dim)
+    model = modelClass(word_dim, hidden_dim=hidden_dim,output_dim=output_dim,wordEmbed=wordEmbed)
     model.E.set_value(E)
     model.U.set_value(U)
     model.W.set_value(W)
@@ -374,10 +374,7 @@ def save_output(model, X, y, outfile='outputs.dat'):
     outputs = np.zeros(len(y))
     for i in range(len(y)):
         # One testing step
-
-        #cost,outputs[i] = model.test_step(X[i], y[i])
-        a,b = model.test_step(X[i], y[i])
-        print 'xx',a,b
+        cost,outputs[i] = model.test_step(X[i], y[i])
     with open(outfile,'w') as fd:
         for i in range(len(y)):
             fd.write("%5.3f %2.1f\n" % (outputs[i],y[i]))
@@ -425,7 +422,6 @@ def wordStats(probs,indices,outputs,fout=""):
       #if i >= len(outputs):
       #    print 'outputs',outputs
       iscorrect = 0
-      #print 'idx',idx,i,outputs
       if idx == outputs[i]:
         iscorrect = 1
         numcorrect += 1
