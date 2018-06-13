@@ -87,10 +87,10 @@ def sentence_data(nnetfile, indexfile, probsfile, snum=-1):
                     print(str(nn_len) + " : " + str(aligned_len))
                     continue  # TODO: solve the problem with apostrophes
                     # sys.exit(-1)
-                simple_tmp, complex_tmp = analyze(alignment, nn_output,
+                data = analyze(alignment, nn_output,
                                                   nn_representation_of_sentence)
-                simple += simple_tmp
-                complex += complex_tmp
+                simple += data[1] + data[3]
+                complex += data[0] + data[2]
                 curr_al += 1
     return simple, complex
 
@@ -105,19 +105,28 @@ def analyze(aligned_output, nn_output, nn_representation_of_sentence):
     :return:
     """
     offset = 0
-    complex = []
-    simple = []
+    complex_correct = []
+    simple_correct = []
+    complex_wrong = []
+    simple_wrong = []
     for i in range(len(nn_representation_of_sentence)):
         word = nn_representation_of_sentence[i]
         if word == PAR_START or word == SENT_START or word == SENT_END:
             offset += 1
         elif aligned_output[i - offset][0] == '_':
             # word is complex
-            complex.append(nn_output[i][0][0])
+            if nn_output[i][0][1] == nn_output[i][0][0]:
+                complex_correct.append(nn_output[i][0][1])
+            else:
+                complex_wrong.append(nn_output[i][0][1])
         else:
             # word is not complex
-            simple.append(nn_output[i][0][0])
-    return simple, complex
+            if nn_output[i][0][1] == nn_output[i][0][0]:
+                simple_correct.append(nn_output[i][0][1])
+            else:
+                simple_wrong.append(nn_output[i][0][1])
+    data = (complex_correct,simple_correct,complex_wrong,simple_wrong)
+    return data
 
 
 def main(probsFile, snum=-1):
@@ -127,12 +136,14 @@ def main(probsFile, snum=-1):
     :param snum: If snum!=-1, only the first snum sentences will be considered
     :return:
     """
-    simple, complex = sentence_data(path.nnetFile, path.indexFile, probsFile, snum)
-    pl.hist([x * 1000 for x in simple], bins=range(0, 1001, 1))
-    pl.hist([x * 1000 for x in complex], bins=range(0, 1001, 1))
+    data = sentence_data(path.nnetFile, path.indexFile, probsFile, snum)
+    pl.hist([x * 1000 for x in data[1]], bins=range(0, 1001, 1))
+    pl.hist([x * 1000 for x in data[0]], bins=range(0, 1001, 1))
     pl.show()
-    print(simple)
-    print(complex)
+    print(data[1]) # simple correct
+    print(data[0]) # complex_correct
+    print(data[3]) # simple_wrong
+    print(data[2]) # complex_wrong
 
 
 if __name__ == "__main__":
