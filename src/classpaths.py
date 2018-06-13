@@ -3,7 +3,7 @@
 
 import sys
 
-USERDIR = '/home/af9562'
+USERDIR = '/home/nlp'
 if sys.platform == 'darwin':
     USERDIR = '/Users/sven'
 BASEDIR = USERDIR + '/wpred'

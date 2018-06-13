@@ -25,7 +25,7 @@ from keras import layers
 from keras.layers import Dense, Activation,SimpleRNN,LSTM,Embedding
 from keras.optimizers import RMSprop
 from keras import initializers
-
+import classpaths as path
 import keras.backend as K
 
 DEBUG = False
