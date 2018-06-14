@@ -1,5 +1,9 @@
-/articles/*
-/output/*
-/SRLIM/*
-/standford-parser-full-2015-12-09/*
-/backup/Version_before_BSRI.zip
+articles/
+output/
+SRILM/
+models/
+predictions/
+stanford-parser-full-2015-12-09/
+backup/Version_before_BSRI.zip
+*.pyc
+src/.idea/*
