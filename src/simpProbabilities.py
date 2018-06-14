@@ -36,6 +36,7 @@ def sentence_data(nnetfile, indexfile, probsfile, snum=-1):
                         (simple, complex)
     """
     h5fd = h5py.File(probsfile, 'r')
+    data = [[], [], [], []]
     with bz2.BZ2File(nnetfile, 'r') as handle:
         (invoc, sentences) = pickle.load(handle)
     abs_id = -1  # absolute id of a sentence within the corpus
@@ -87,12 +88,13 @@ def sentence_data(nnetfile, indexfile, probsfile, snum=-1):
                     print(str(nn_len) + " : " + str(aligned_len))
                     continue  # TODO: solve the problem with apostrophes
                     # sys.exit(-1)
-                data = analyze(alignment, nn_output,
+                tmp_data = analyze(alignment, nn_output,
                                                   nn_representation_of_sentence)
+                data = [data[k] + tmp_data[k] for k in range(len(data))]
                 simple += data[1] + data[3]
                 complex += data[0] + data[2]
                 curr_al += 1
-    return simple, complex
+    return data
 
 
 def analyze(aligned_output, nn_output, nn_representation_of_sentence):
@@ -115,17 +117,17 @@ def analyze(aligned_output, nn_output, nn_representation_of_sentence):
             offset += 1
         elif aligned_output[i - offset][0] == '_':
             # word is complex
-            if nn_output[i][0][1] == nn_output[i][0][0]:
-                complex_correct.append(nn_output[i][0][1])
+            if nn_output[i][0][1] == nn_output[i][1][1]:
+                complex_correct.append(nn_output[i][1][0])
             else:
-                complex_wrong.append(nn_output[i][0][1])
+                complex_wrong.append(nn_output[i][1][0])
         else:
             # word is not complex
-            if nn_output[i][0][1] == nn_output[i][0][0]:
-                simple_correct.append(nn_output[i][0][1])
+            if nn_output[i][0][1] == nn_output[i][1][1]:
+                simple_correct.append(nn_output[i][1][0])
             else:
-                simple_wrong.append(nn_output[i][0][1])
-    data = (complex_correct,simple_correct,complex_wrong,simple_wrong)
+                simple_wrong.append(nn_output[i][1][0])
+    data = [complex_correct,simple_correct,complex_wrong,simple_wrong]
     return data
 
 
@@ -137,13 +139,22 @@ def main(probsFile, snum=-1):
     :return:
     """
     data = sentence_data(path.nnetFile, path.indexFile, probsFile, snum)
-    pl.hist([x * 1000 for x in data[1]], bins=range(0, 1001, 1))
-    pl.hist([x * 1000 for x in data[0]], bins=range(0, 1001, 1))
+    # print(data[1])
+    print("Plotting simple_correct")
+    pl.hist([x * 100 for x in data[1]], bins=range(0, 101, 1))
     pl.show()
-    print(data[1]) # simple correct
-    print(data[0]) # complex_correct
-    print(data[3]) # simple_wrong
-    print(data[2]) # complex_wrong
+    print("Plotting complex_correct")
+    # print(data[0])
+    pl.hist([x * 100 for x in data[0]], bins=range(0, 101, 1))
+    pl.show()
+    print("Plotting simple_wrong")
+    # print(data[3])
+    pl.hist([x * 100 for x in data[3]], bins=range(0, 101, 1))
+    pl.show()
+    print("Plotting complex_wrong")
+    # print(data[2])
+    pl.hist([x * 100 for x in data[2]], bins=range(0, 101, 1))
+    pl.show()
 
 
 if __name__ == "__main__":

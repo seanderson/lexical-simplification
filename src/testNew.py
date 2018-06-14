@@ -56,6 +56,7 @@ if DEBUG: print (inputs_len[:DEBUG_SIZE])
 
 outputs = np.asarray( [[w+1 for w in sent[1:]] for sent in sentences])
 
+
 maxlen = 108 # taken from training inputs
 print ('Feature maxlen',maxlen)
 

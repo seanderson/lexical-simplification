@@ -14,7 +14,7 @@ import numpy as np
 from utils import *
 from datetime import datetime,timedelta
 
-
+import h5py
 import bz2
 import cPickle as pickle
 from subprocess import call
