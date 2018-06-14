@@ -27,6 +27,7 @@ from keras.optimizers import RMSprop
 from keras import initializers
 import classpaths as path
 import keras.backend as K
+from utilsKeras import *
 
 DEBUG = False
 

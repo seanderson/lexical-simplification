@@ -139,6 +139,7 @@ def main(probsFile, snum=-1):
     :return:
     """
     data = sentence_data(path.nnetFile, path.indexFile, probsFile, snum)
+    # print([len(x) for x in data])
     # print(data[1])
     print("Plotting simple_correct")
     pl.hist([x * 100 for x in data[1]], bins=range(0, 101, 1))
