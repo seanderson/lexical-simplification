@@ -2,7 +2,10 @@ articles/
 output/
 SRILM/
 models/
+data/
 predictions/
+.idea/
+.ipynb_checkpoints/
 stanford-parser-full-2015-12-09/
 backup/Version_before_BSRI.zip
 *.pyc
