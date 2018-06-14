@@ -5,8 +5,8 @@ import sys
 
 USERDIR = '/home/nlp'
 if sys.platform == 'darwin':
-    USERDIR = '/Users/sven'
-BASEDIR = USERDIR + '/wpred'
+    USERDIR = '/Users/alexanderfedchin'
+BASEDIR = USERDIR + '/newsela'
 METAFILE = BASEDIR + '/articles_metadata.csv'
 PARSERDIR = BASEDIR + '/stanford-parser-full-2015-12-09/'
 OUTDIR_SENTENCES = BASEDIR+'/output/sentences/'

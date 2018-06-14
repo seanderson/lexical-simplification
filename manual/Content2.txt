@@ -1,0 +1,9 @@
+This folder contains the results of the manual alignments
+
+Content:
+
+-paragraphs: each file in this folder contains the results of the paragraph alignment of two articles. Every line (except for the first one) represents one alignment. It contains the list of the paragraphs from the first article separated by commas, and then, after two \t symbols, the same list for the second article. All indexes are 1-based.
+
+-sentences: each file in this folder contains the results of the sentence alignment of two articles. Every line (except for the first one) represents one alignment. It contains the list of the sentences from the first article separated by commas, and then, after two \t symbols, the same list for the second article. Every sentence is represented as a tuple of two numbers, the first number indicates the paragraph, the second - the position the sentence occupies within the paragraph. All indexes are 1-based.
+
+-xmls: xml files that are convenient-to-read versions of tokenized articles.
