@@ -13,6 +13,7 @@ import classpaths as path
 
 DEBUG = False
 
+
 def sentence_data(nnetfile, indexfile, probsfile, snum=-1):
     """
     Get alignment output and match it with the output of the neural networks.

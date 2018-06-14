@@ -185,8 +185,8 @@ def lemmatize(s):
     return lemmas
 
 
-AFTER_APOSTROPHE = ('ve', 's', 're', 'nt', 'll', 'd', 'm', 'n')
-SPECIAL_CASES = ('o', 'O', 'l')
+AFTER_APOSTROPHE = ('ve', 's', 're', 'nt', 'll', 'd', 'm', 'n', 'N')
+SPECIAL_CASES = ('o', 'O', 'l', "D")
 REGEX_FOR_CONTRACTIONS = re.compile(' (' + '|'.join(AFTER_APOSTROPHE) + ') ')
 
 
