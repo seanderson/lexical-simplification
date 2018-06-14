@@ -62,7 +62,7 @@ class Alignment(object):
             if lw == '':
                 new_s.append(Alignment.FILL)
             elif lw not in simple_sentence:  # not found, which means that
-		# it probably was simplified
+                # it probably was simplified
                 new_s.append('_' + w + '_')
             else:
                 new_s.append(w)
@@ -107,20 +107,6 @@ def replace(threeDimArray, old, new):
             for i in range(len(oneDim)):
                 if oneDim[i] == old:
                     oneDim[i] == new
-
-
-"""def get_aligned_sentence_strings(metafile, slug, level1, level2, auto=True):
-    '''
-    Returns list of list of matching substrings, each is one match across
-    specified levels.
-    '''
-    sentpairs = get_aligned_sentences(metafile, slug, level1, level2, auto)
-    sstringpairs = []  # sentence-string pairs
-    for alignment in sentpairs:
-        a0 = alignment.sent0.split(';')[alignment.part0]
-        a1 = alignment.sent1.split(';')[alignment.part1]
-        sstringpairs.append([a0, a1])
-    return sstringpairs"""
 
 
 def get_aligned_sentences(metafile, slug, level1, level2, auto=True):
@@ -222,8 +208,28 @@ def get_aligned_sentences(metafile, slug, level1, level2, auto=True):
     # result accounts for N-1, N-N and 1-N alignments. new_result does not
     new_result = []
     for block in result:
-        if len(block) == 1 and len(block[0].sent0.split(';')) == 1:
-            # TODO fix n to 1 and n to n alignment
+        if len(block) == 1:
+            if len(block[0].sent0.split(';')) == 1:
+                new_result += block
+        else:
+            # TODO: this is a preliminary way to fix things, not the most
+            # elegant one
+            block = sorted(block, key=lambda smth: smth.ind0, reverse=False)
+            i = 1
+            count = 0
+            while i < len(block):
+                if block[i].ind0 == block[i-1].ind0:
+                    block[i-1].sent1 += " " + block[i].sent1
+                    count += 1
+                    del block[i]
+                else:
+                    if count < len(block[i-1].sent0.split(';')):
+                        del block[i-1]
+                    else:
+                        i += 1
+                    count = 0
+            if count < len(block[-1].sent0.split(';')):
+                del block[-1]
             new_result += block
     return sorted(new_result, key=lambda smth: smth.ind0, reverse=False)
 
@@ -247,7 +253,7 @@ def convert_coordinates(old,pars):
 if __name__ == "__main__":
     """Example use of get_aligned_sentences"""
     metafile = loadMetafile()
-    sentpairs =  (metafile, "boston-olympicbid", 0, 1)
+    sentpairs =  get_aligned_sentences(metafile, "10dollarbill-woman", 0, 1)
     for alignment in sentpairs:
         if alignment.sent0 != alignment.sent1:
             print("FIRST-SENTENCE:" + str(alignment.ind0) + ':' + str(
