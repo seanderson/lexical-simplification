@@ -4,7 +4,7 @@ changes from aligned sentences.
 """
 
 from alignutils import *
-import newselautil as nsla
+from newselautil import *
 from prepData import *
 import utilsKeras as utils
 import h5py
@@ -42,7 +42,7 @@ def sentence_data(nnetfile, indexfile, probsfile, snum=-1):
         (invoc, sentences) = pickle.load(handle)
     abs_id = -1  # absolute id of a sentence within the corpus
     filenames, npars, sindlst = read_index_file(indexfile)
-    articles = nsla.loadMetafile()
+    articles = loadMetafile()
     simple = []
     complex = []
     predictions = utils.readProbs(h5fd)
@@ -90,7 +90,7 @@ def sentence_data(nnetfile, indexfile, probsfile, snum=-1):
                     continue  # TODO: solve the problem with apostrophes
                     # sys.exit(-1)
                 tmp_data = analyze(alignment, nn_output,
-                                                  nn_representation_of_sentence)
+                                                  nn_representation_of_sentence, invoc)
                 data = [data[k] + tmp_data[k] for k in range(len(data))]
                 simple += data[1] + data[3]
                 complex += data[0] + data[2]
@@ -98,7 +98,7 @@ def sentence_data(nnetfile, indexfile, probsfile, snum=-1):
     return data
 
 
-def analyze(aligned_output, nn_output, nn_representation_of_sentence):
+def analyze(aligned_output, nn_output, nn_representation_of_sentence, voc):
     """
     Given that aligned output and nn_output represent the same sentence,
     return the probabilities that the NN assigns to complex and simplified words
@@ -114,22 +114,40 @@ def analyze(aligned_output, nn_output, nn_representation_of_sentence):
     simple_wrong = []
     for i in range(len(nn_representation_of_sentence)):
         word = nn_representation_of_sentence[i]
+        # if nn_output[i][1][0] <.023 and nn_output[i][0][1] > 0.15:
+        # print(voc[int(nn_output[i][0][1]) -1])
         if word == PAR_START or word == SENT_START or word == SENT_END:
             offset += 1
         elif aligned_output[i - offset][0] == '_':
             # word is complex
-            if nn_output[i][0][1] == nn_output[i][1][1]:
+            if lemmas_are_equal(nn_output[i][0][1], nn_output[i][1][1], voc):
                 complex_correct.append(nn_output[i][1][0])
             else:
                 complex_wrong.append(nn_output[i][1][0])
         else:
             # word is not complex
-            if nn_output[i][0][1] == nn_output[i][1][1]:
+            if lemmas_are_equal(nn_output[i][0][1], nn_output[i][1][1], voc):
                 simple_correct.append(nn_output[i][1][0])
             else:
                 simple_wrong.append(nn_output[i][1][0])
     data = [complex_correct,simple_correct,complex_wrong,simple_wrong]
     return data
+
+
+def lemmas_are_equal(ind0, ind1, voc):
+    """
+    :param ind0: the index of the first lemma
+    :param ind1: the index of the second lemma
+    :param voc: vocabulary
+    :return:
+    """
+    ind0 = int(ind0)
+    ind1 = int(ind1)
+    lemma0 = Lemmatizer.lemmatize(voc[ind0 - 1])
+    lemma1 = Lemmatizer.lemmatize(voc[ind1 - 1])
+    if (lemma0 == lemma1) != (ind0 == ind1):
+        print(voc[ind0 - 1], voc[ind1 - 1])
+    return lemma0 == lemma1 or ind0 == ind1
 
 
 def main(probsFile, snum=-1):
@@ -140,7 +158,9 @@ def main(probsFile, snum=-1):
     :return:
     """
     data = sentence_data(path.nnetFile, path.indexFile, probsFile, snum)
-    # print([len(x) for x in data])
+    print("Complex: correct " + str(round(float(len(data[0]))/(len(data[0]) + len(data[2])) * 100, 3)) + "% of times")
+    print("Simple: correct " + str(
+        round(float(len(data[1]))/(len(data[1]) + len(data[3])) * 100, 3)) + "% of times")
     # print(data[1])
     print("Plotting simple_correct")
     pl.hist([x * 100 for x in data[1]], bins=range(0, 101, 1))

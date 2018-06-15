@@ -10,3 +10,5 @@ stanford-parser-full-2015-12-09/
 backup/Version_before_BSRI.zip
 *.pyc
 src/.idea/*
+SimplePPDB/*
+ppdb-2.0-tldr
