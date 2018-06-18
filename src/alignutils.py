@@ -47,7 +47,7 @@ class Alignment(object):
         self.p_ind0 = p_ind0
         self.p_ind1 = p_ind1
 
-    def mark_simplified(self, no_stopwords=True):
+    def mark_simplified(self):
         """
         Analyze the alignment and compare the original sentence with the 
         simplified version
@@ -61,8 +61,9 @@ class Alignment(object):
             lw = w.lower()
             if lw == '':
                 new_s.append(Alignment.FILL)
-            elif lw not in simple_sentence and (
-                    not no_stopwords or lw not in STOPWORDS):
+            # elif lw not in simple_sentence and (
+                    # not no_stopwords or lw not in STOPWORDS):
+            elif lw not in simple_sentence and lw not in STOPWORDS:
                 # not found, which means that it probably was simplified
                 new_s.append('_' + w + '_')
             else:

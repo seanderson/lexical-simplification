@@ -28,25 +28,30 @@ from keras import initializers
 import keras.backend as K
 
 
-DEBUG = True # Debug version for quicker testing
-INPUT_DATA_FILE = "./data/train/NoOverlapRawTrain.pbz2"
-VALID_DATA_FILE = "./data/train/NoOverlapRawValid.pbz2"
-INPUT_DATA_FILE = VALID_DATA_FILE
+DEBUG = True  # Debug version for quicker testing
+INPUT_DATA_FILE = "../data/train/NoOverlapRawTrain.pbz2"
+VALID_DATA_FILE = "../data/train/NoOverlapRawValid.pbz2"
+# INPUT_DATA_FILE = VALID_DATA_FILE  # Is it for debugging??
 
 HIDDEN_DIM = 100
 LEARNING_RATE = 0.1
 EMBEDDING_DIM = 1000
 NEPOCH = 100
 
-if DEBUG == True:
+if len(sys.argv) > 1:
+    MODEL_INPUT_FILE = sys.argv[1]
+else:
+    MODEL_INPUT_FILE = "INIT"
+
+if DEBUG:
   print 50*'=','\nDEBUGGING = TRUE\n',50*'='
-  INPUT_DATA_FILE = "./data/test/DebugRawTest.pbz2"
-  VALID_DATA_FILE = "./data/test/DebugRawTest.pbz2"
-  NEPOCH = 2
+  # INPUT_DATA_FILE = "../data/test/DebugRawTest.pbz2"
+  # VALID_DATA_FILE = "../data/test/DebugRawTest.pbz2"
+  NEPOCH = 6
   HIDDEN_DIM = 10
   EMBEDDING_DIM = 10
   MODEL_OUTPUT_FILE = ""
-  MODEL_INPUT_FILE = sys.argv[1]
+
 
 LAST_UPDATE=datetime.now()
 
@@ -61,8 +66,8 @@ OUTPUT_DIM = VOCABULARY_SIZE
 inputs = np.asarray( [[w+1 for w in sent[:-1]] for sent in sentences])
 outputs = np.asarray( [[w+1 for w in sent[1:]] for sent in sentences])
 if DEBUG:
-  inputs = inputs[:100]
-  outputs = outputs[:100]
+  inputs = inputs[:1000]
+  outputs = outputs[:1000]
 
 maxlen = max(map(len,inputs))
 
@@ -87,8 +92,8 @@ with bz2.BZ2File(VALID_DATA_FILE,'r') as handle:
 inputs_v = np.asarray( [[w+1 for w in sent[:-1]] for sent in sentences])
 outputs_v = np.asarray( [[w+1 for w in sent[1:]] for sent in sentences])
 if DEBUG:
-  inputs_v = inputs_v[:100]
-  outputs_v = outputs_v[:100]
+  inputs_v = inputs_v[:1000]
+  outputs_v = outputs_v[:1000]
 
 for i in xrange(len(outputs_v)):
     for j in xrange(len(outputs_v[i])):
@@ -136,7 +141,7 @@ else:
 model.summary()
 
 
-filepath="./srn-{epoch:02d}-{val_loss:.2f}.hdf5"
+filepath="../srn-{epoch:02d}-{val_loss:.2f}.hdf5"
 checkpoint = keras.callbacks.ModelCheckpoint(filepath,
                                              monitor='val_loss',
                                              verbose=1,
