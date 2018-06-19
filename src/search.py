@@ -95,7 +95,8 @@ def detect_sentences():
             if line not in sentences:
                 if i == 0 or \
                         lines[i].split('\t')[-1] != lines[i-1].split('\t')[-1]:
-                    print("Cannot find: " + lines[i].split('\t')[-1])
+                    # print("Cannot find: " + lines[i].split('\t')[-1])
+                    pass
                 i += 1
                 continue
 
@@ -108,10 +109,10 @@ def detect_sentences():
                         chosen = True
                         break
                 if not chosen:
-                    print("Line appears in many files: " +
-                          lines[i].split('\t')[-1][:-1])
-                    print("These files are: " + ' '.join(
-                        x[0] for x in sentences[line]))
+                    # print("Line appears in many files: " +
+                    # lines[i].split('\t')[-1][:-1])
+                    # print("These files are: " + ' '.join(
+                    # x[0] for x in sentences[line]))
                     i += 1
                     continue
 
@@ -125,30 +126,55 @@ def detect_sentences():
               str(lines_total) + ' lines')
 
 
-def stats(word, ind, score, alignemnt, original):
-    alignemnt.sent0 = re.sub(r'-', ' - ', alignemnt.sent0)
-    marked = alignemnt.mark_simplified()
+def match_word(word, ind, alignemnt, original):
+    """
+    Try to match teh alignment outpu tand the output of the CHris paper.
+    :param word:
+    :param ind:     index of the word according to Chris paper data
+    :param score:
+    :param alignemnt:
+    :param original:
+    :return: A tuple of two booleans. The first is True if the corresponding
+    word was found in the alignment output. The second is true if the word is
+    considered complex by the alignments program
+    """
+    word = word.lower()
+    marked = alignemnt.mark_simplified(additionalTokenizer=False)
+
+    complex = False
     if ind < len(marked):
         if marked[ind][0] == '_':
-            marked[ind] == marked[ind][1:-1]
+            marked[ind] = marked[ind][1:-1]
             complex = True
         if marked[ind] == word:
-            return True
+            return True, complex
+
+    inverse_ind = len(original.split(' ')) - ind
+    if len(marked) - inverse_ind > 0:
+        if marked[-inverse_ind][0] == '_':
+            marked[-inverse_ind] = marked[-inverse_ind][1:-1]
+            complex = True
+        if marked[-inverse_ind] == word:
+            return True, complex
+
     new_ind = -1
     i = 0
     while i < len(marked):
+        complex_candidate = False
         if marked[i][0] == '_':
             marked[i] = marked[i][1:-1]
+            complex_candidate = True
         if marked[i] == word:
             if new_ind != -1:
                 # print("Two or more instances ")
-                return False
+                return False, False
+            complex = complex_candidate
             new_ind = i
         i += 1
     if new_ind == -1:
         # print("No instances")
-        return False
-    return True
+        return False, False
+    return True, complex
 
 
 def compare_alignments():
@@ -164,6 +190,8 @@ def compare_alignments():
     sentences_aligned = 0
     words_in_aligned_sentences = 0
     words_aligned = 0
+    levels = [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0],
+              [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
     with io.open(CHRIS_PAPER_FILE.split('.')[0] + '_supplied.txt') as file:
         lines = file.readlines()
     prev = ("", 0)
@@ -178,21 +206,32 @@ def compare_alignments():
 
         if slug not in aligned_files:
             aligned_files[slug] = alignutils.get_aligned_sentences(
-                info, slug, 0, 1)
+                info, slug, 0, 1, use_spacy=True)
         slug_aligned = aligned_files[slug]
         for sent_al in slug_aligned:
             if sent_al.ind0 == s_ind:
                 if slug != prev[0] or s_ind != prev[1]:
                     sentences_aligned += 1
                 words_in_aligned_sentences += 1
-                if stats(word, w_ind, score, sent_al, sent):
+                matching = match_word(word, w_ind, sent_al, sent)
+                if matching[0]:
                     words_aligned += 1
+                    if matching[1]:
+                        levels[score][0] += 1
+                    else:
+                        levels[score][1] += 1
                 break
         prev = (slug, s_ind)
     print('Out of ' + str(sentences_total) + ', ' + str(sentences_aligned) +
           ' sentences are aligned')
     print('Found words for ' + str(words_aligned) + ' out of the total of ' +
           str(words_in_aligned_sentences))
+    for i in range(len(levels)):
+        if levels[i][0] + levels[i][1] != 0:
+            print("Level " + str(i) + ": " + str(round(float(levels[i][0])/(levels[i][0] + levels[i][1]), 2)))
+        else:
+            # print("Level " + str(i) + ": 0.0")
+            break
 
 
 if __name__ == "__main__":

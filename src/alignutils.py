@@ -60,7 +60,7 @@ class Alignment(object):
             complex_sentence = [x.lower() for x in tokenize(self.sent0)]
         else:
             simple_sentence = [x.lower() for x in self.sent1.split(' ')]
-            complex_sentence = [x.lower() for x in tokenize(self.sent0)]
+            complex_sentence = [x.lower() for x in self.sent0.split(' ')]
         new_s = []
         for lw in complex_sentence:
             if lw == '':
@@ -73,6 +73,15 @@ class Alignment(object):
             else:
                 new_s.append(lw)
         return new_s
+
+    def convert_to_spacy(self, spacy_lines):
+        self.sent0 = spacy_lines[self.ind0]
+        self.sent0 = re.sub('&', '& amp ;', self.sent0)
+        self.sent0 = re.sub("`", "'", self.sent0)
+        self.sent0 = re.sub(" ' re ", " 're ", self.sent0)
+        self.sent0 = re.sub(" ' s ", " 's ", self.sent0)
+        self.sent0 = re.sub('<', '& lt;', self.sent0)
+        self.sent0 = re.sub('>', '& gt ;', self.sent0)
 
 
 def get_lowest_element_with_slug(slug, metafile):
@@ -115,7 +124,7 @@ def replace(threeDimArray, old, new):
                     oneDim[i] == new
 
 
-def get_aligned_sentences(metafile, slug, level1, level2, auto=True):
+def get_aligned_sentences(metafile, slug, level1, level2, auto=True, use_spacy=False):
     """
     Returns the list of Alignment objects sorted by the absolute index.
     :param metafile:        the metafile loaded with newselautils.loadMetafile()
@@ -237,6 +246,11 @@ def get_aligned_sentences(metafile, slug, level1, level2, auto=True):
             if count < len(block[-1].sent0.split(';')):
                 del block[-1]
             new_result += block
+    if use_spacy:
+        with io.open(path.BASEDIR + '/articles/' + slug + '.en.0.txt.spacy') as file:
+            lines = file.readlines()
+        for alignment in new_result:
+            alignment.convert_to_spacy(lines)
     return sorted(new_result, key=lambda smth: smth.ind0, reverse=False)
 
 
