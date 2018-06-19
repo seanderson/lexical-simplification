@@ -34,3 +34,6 @@ indexFile = BASEDIR + "/data/test/NoOverlapRawTest.idx"
 
 CHRIS_PAPER_FILE = USERDIR + \
                    "/corpora/newsela_complex/Newsela_Complex_Words_Dataset.txt"
+
+MORPH_ADORNER_TOOLKIT = BASEDIR + "/ghpaetzold-MorphAdornerToolkit-44bb87d/"    # can be downloaded from
+    # http://ghpaetzold.github.io/MorphAdornerToolkit/

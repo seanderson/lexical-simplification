@@ -117,6 +117,7 @@ def analyze(aligned_output, nn_output, nn_representation_of_sentence, voc, topN=
     simple_correct = []
     complex_wrong = []
     simple_wrong = []
+    b = False
     # TODO: ALL of the unknown tags should be ignored
     for i in range(len(nn_representation_of_sentence)):
         word = nn_representation_of_sentence[i]
@@ -142,6 +143,9 @@ def analyze(aligned_output, nn_output, nn_representation_of_sentence, voc, topN=
                                             [nn_output[i][1][1]], voc)
         if word == PAR_START or word == SENT_START or word == SENT_END:
             offset += 1
+        # elif not b:
+            # b = True
+            # continue
         elif aligned_output[i - offset][0] == '_':
             # word is complex
             if lemmas_equal:
