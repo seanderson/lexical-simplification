@@ -47,7 +47,7 @@ class Alignment(object):
         self.p_ind0 = p_ind0
         self.p_ind1 = p_ind1
 
-    def mark_simplified(self):
+    def mark_simplified(self, no_stopwords=True, additionalTokenizer = True):
         """
         Analyze the alignment and compare the original sentence with the 
         simplified version
@@ -55,19 +55,23 @@ class Alignment(object):
                  sentence. Tokens surrounded with '_' signs were simplified
                  by the authors of newsela corpus 
         """
-        simple_sentence = [x.lower() for x in tokenize(self.sent1)]
+        if additionalTokenizer:
+            simple_sentence = [x.lower() for x in tokenize(self.sent1)]
+            complex_sentence = [x.lower() for x in tokenize(self.sent0)]
+        else:
+            simple_sentence = [x.lower() for x in self.sent1.split(' ')]
+            complex_sentence = [x.lower() for x in tokenize(self.sent0)]
         new_s = []
-        for w in tokenize(self.sent0):
-            lw = w.lower()
+        for lw in complex_sentence:
             if lw == '':
                 new_s.append(Alignment.FILL)
             # elif lw not in simple_sentence and (
                     # not no_stopwords or lw not in STOPWORDS):
             elif lw not in simple_sentence and lw not in STOPWORDS:
                 # not found, which means that it probably was simplified
-                new_s.append('_' + w + '_')
+                new_s.append('_' + lw + '_')
             else:
-                new_s.append(w)
+                new_s.append(lw)
         return new_s
 
 

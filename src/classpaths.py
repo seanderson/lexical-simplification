@@ -31,3 +31,6 @@ NN_MODELS = BASEDIR + "/models/"
 DEFAULT_MODEL_NAME = PREDICTIONS + "Best02-srn-63-3.01-probs.h5"
 nnetFile = BASEDIR + "/data/test/NoOverlapRawTest.pbz2"
 indexFile = BASEDIR + "/data/test/NoOverlapRawTest.idx"
+
+CHRIS_PAPER_FILE = USERDIR + \
+                   "/corpora/newsela_complex/Newsela_Complex_Words_Dataset.txt"
