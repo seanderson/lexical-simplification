@@ -32,7 +32,10 @@ DEFAULT_MODEL_NAME = PREDICTIONS + "Best02-srn-63-3.01-probs.h5"
 nnetFile = BASEDIR + "/data/test/NoOverlapRawTest.pbz2"
 indexFile = BASEDIR + "/data/test/NoOverlapRawTest.idx"
 
-CHRIS_PAPER_FILE = USERDIR + \
+KRIZ_IDX_FILE = BASEDIR + "/data/test/paper.idx"
+KRIZ_BZ2_FILE = BASEDIR + "/data/test/paper.bz2"
+
+KRIZ_PAPER_FILE = USERDIR + \
                    "/corpora/newsela_complex/Newsela_Complex_Words_Dataset.txt"
 
 MORPH_ADORNER_TOOLKIT = BASEDIR + "/ghpaetzold-MorphAdornerToolkit-44bb87d/"    # can be downloaded from

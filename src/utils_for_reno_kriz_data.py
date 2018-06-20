@@ -10,18 +10,19 @@ import bz2
 import pickle
 import alignutils
 
-COMPLEX_SCORE = 6
 EXT = ".spacy"  # spaCy extension
 sentences = {}  # all of the sentences loaded as a dictionary
 # nlp = spacy.load('en_core_web_sm')
 # spaCy model that the authors of the article most likely used
-idx_file = "/home/nlp/newsela/data/test/paper.idx"
-bz2_file = "/home/nlp/newsela/data/test/paper.bz2"
 
 
 def create_spacy_corpus():
     """
-    Tokenized all the 0-level articles and saves them in the .spacy format
+    Tokenized all the 0-level articles using spacy and saves them in the
+    .spacy format. Note: in order to keep track of sentences' indexes the
+    .tok files are tokenized. This means that the output of the tokenization
+    has to undergo some changes so that it looks as if the .txt files were
+    directly tokenized
     :return:
     """
     info = loadMetafile()
@@ -50,7 +51,14 @@ def create_spacy_file(filename, lines):
         for line in lines:
             if line[0:len(PARPREFIX)] == PARPREFIX or line[0] == "#":
                 continue
-            file.write(' '.join([token.text for token in nlp(line)]))
+            line = ' '.join([token.text for token in nlp(line)])
+            line = re.sub('&', '& amp ;', line)
+            line = re.sub("`", "'", line)
+            line = re.sub(" ' re ", " 're ", line)
+            line = re.sub(" ' s ", " 's ", line)
+            line = re.sub('<', '& lt;', line)
+            line = re.sub('>', '& gt ;', line)
+            file.write(line)
 
 
 def load_spacy_corpus():
@@ -66,11 +74,9 @@ def load_spacy_corpus():
                      mode='r', encoding='utf-8') as fd:
             lines = fd.readlines()
             for j in range(len(lines)):
-                line = re.sub('&', '& amp ;', lines[j])
-                line = re.sub('<', '& lt;', line)
-                line = re.sub('>', '& gt ;', line)
-                line = re.sub(r'[^a-zA-Z]', '', line)
-                line = line.lower()
+                line = re.sub(r'[^a-zA-Z]', '', lines[j]).lower()
+                # This way it is much more probable that the sentences from
+                # .tok files will match those from the sentences dictionary
                 if line not in sentences:
                     sentences[line] = [(info[i]['slug'], j)]
                 else:
@@ -81,14 +87,14 @@ def load_spacy_corpus():
 
 def detect_sentences():
     """
-    Determine to which article a sentence from CHRIS_PAPER_FILE belongs to and
+    Determine to which article a sentence from KRIZ_PAPER_FILE belongs to and
     write this new information to a new file
     :return:
     """
     load_spacy_corpus()
-    with io.open(CHRIS_PAPER_FILE, 'r') as file:
+    with io.open(KRIZ_PAPER_FILE, 'r') as file:
         lines = file.readlines()
-    with io.open(CHRIS_PAPER_FILE.split('.')[0] + '_supplied.txt', 'w') as file:
+    with io.open(KRIZ_PAPER_FILE.split('.')[0] + '_supplied.txt', 'w') as file:
         i = 0
         lines_total = 0
         lines_determined = 0
@@ -116,9 +122,9 @@ def detect_sentences():
                         break
                 if not chosen:
                     # print("Line appears in many files: " +
-                    # lines[i].split('\t')[-1][:-1])
+                    #     lines[i].split('\t')[-1][:-1])
                     # print("These files are: " + ' '.join(
-                    # x[0] for x in sentences[line]))
+                    #     x[0] for x in sentences[line]))
                     i += 1
                     continue
 
@@ -132,11 +138,31 @@ def detect_sentences():
               str(lines_total) + ' lines')
 
 
-def match_word(word, ind, score, alignemnt, original):
+def try_word(word, marked, ind):
     """
-    Try to match teh alignment outpu tand the output of the CHris paper.
+    See if the marked[ind] equal the word.
+    :param word:    A word from the Reno Kriz data file
+    :param marked:  The alignment as a list of tokens
+    :param ind:     The id of the token from marked to match with word
+    :return: A tuple of two booleans. The first is True, if the two words match.
+    The second is true, if the marked[ind] is marked as complex in the alignment
+    """
+    complex = False
+    if ind < -len(marked) or ind >= len(marked):
+        return False, False
+    if marked[ind][0] == '_':
+        marked[ind] = marked[ind][1:-1]
+        complex = True
+    if marked[ind] == word:
+        return True, complex
+    return False, complex
+
+
+def match_word(word, ind, alignemnt, original):
+    """
+    Try to match teh alignment outpu tand the output of the Kriz paper.
     :param word:
-    :param ind:     index of the word according to Chris paper data
+    :param ind:     index of the word according to Reno Kriz paper data
     :param score:
     :param alignemnt:
     :param original:
@@ -144,38 +170,20 @@ def match_word(word, ind, score, alignemnt, original):
     word was found in the alignment output. The second is true if the word is
     considered complex by the alignments program
     """
-    alignemnt.converted_to_spacy = True
     word = word.lower()
     marked = alignemnt.mark_simplified(additionalTokenizer=False)
-
-    complex = False
-    if ind < len(marked):
-        if marked[ind][0] == '_':
-            marked[ind] = marked[ind][1:-1]
-            complex = True
-        if marked[ind] == word:
-            if score >= COMPLEX_SCORE:
-                alignemnt.simplified[ind] = '_' + alignemnt.simplified[ind]
-            return True, complex
-
-    inverse_ind = len(original.split(' ')) - ind
-    if len(marked) - inverse_ind > 0:
-        if marked[-inverse_ind][0] == '_':
-            marked[-inverse_ind] = marked[-inverse_ind][1:-1]
-            complex = True
-        if marked[-inverse_ind] == word:
-            if score >= COMPLEX_SCORE:
-                alignemnt.simplified[-inverse_ind] = '_' + alignemnt.simplified[-inverse_ind]
-            return True, complex
+    match, complex = try_word(word, marked, ind)
+    if match:
+        return True, complex
+    match, complex = try_word(word, marked, ind - len(original.split(' ')))
+    if match:
+        return True, complex
 
     new_ind = -1
     i = 0
     while i < len(marked):
-        complex_candidate = False
-        if marked[i][0] == '_':
-            marked[i] = marked[i][1:-1]
-            complex_candidate = True
-        if marked[i] == word:
+        match, complex_candidate = try_word(word, marked, i)
+        if match:
             if new_ind != -1:
                 # print("Two or more instances ")
                 return False, False
@@ -185,15 +193,14 @@ def match_word(word, ind, score, alignemnt, original):
     if new_ind == -1:
         # print("No instances")
         return False, False
-    if score >= COMPLEX_SCORE:
-        alignemnt.simplified[new_ind] = '_' + alignemnt.simplified[new_ind]
     return True, complex
 
 
-def compare_alignments():
+def compare_alignments(level_to_compare):
     """
-    Print various statistics about how the data from the CHRIS PAPER differs
+    Print various statistics about how the data from the KRIZ PAPER differs
     from that obtained via the alignment algorithm
+    :param level_to_compare: Lower level of alignment to use
     :return:
     """
     info = loadMetafile()
@@ -205,7 +212,7 @@ def compare_alignments():
     words_aligned = 0
     levels = [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0],
               [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
-    with io.open(CHRIS_PAPER_FILE.split('.')[0] + '_supplied.txt') as file:
+    with io.open(KRIZ_PAPER_FILE.split('.')[0] + '_supplied.txt') as file:
         lines = file.readlines()
     prev = ("", 0)
     for line in lines:
@@ -219,14 +226,14 @@ def compare_alignments():
 
         if slug not in aligned_files:
             aligned_files[slug] = alignutils.get_aligned_sentences(
-                info, slug, 0, 2, use_spacy=True)
+                info, slug, 0, level_to_compare, use_spacy=True)
         slug_aligned = aligned_files[slug]
         for sent_al in slug_aligned:
             if sent_al.ind0 == s_ind:
                 if slug != prev[0] or s_ind != prev[1]:
                     sentences_aligned += 1
                 words_in_aligned_sentences += 1
-                matching = match_word(word, w_ind, score, sent_al, sent)
+                matching = match_word(word, w_ind, sent_al, sent)
                 if matching[0]:
                     words_aligned += 1
                     if matching[1]:
@@ -243,18 +250,16 @@ def compare_alignments():
         if levels[i][0] + levels[i][1] != 0:
             print("Level " + str(i) + ": " + str(round(float(levels[i][0])/(levels[i][0] + levels[i][1]), 2)))
         else:
-            # print("Level " + str(i) + ": 0.0")
             break
     return aligned_files
 
 
 def create_idx_file():
     """
-    Create an idx file for the data from the Chris paper
-    :param idx_file_name:
+    Create an idx file for the data from the Reno Kriz paper
     :return:
     """
-    with io.open(CHRIS_PAPER_FILE.split('.')[0] + '_supplied.txt') as file:
+    with io.open(KRIZ_PAPER_FILE.split('.')[0] + '_supplied.txt') as file:
         lines = file.readlines()
     previous = ""
     output = []
@@ -267,33 +272,18 @@ def create_idx_file():
                                 separateBySemicolon=False)
         info = [filename, str(len(pars))] + [str(len(x)) for x in pars]
         output.append(' '.join(info))
-    with io.open(idx_file, 'w') as file:
+    with io.open(KRIZ_IDX_FILE, 'w') as file:
         file.writelines(str(len(output)) + '\n' + '\n'.join(output))
-
-
-def work_with_spacy(line):
-    """
-    Make changes to the line so that it looks as if spacy was originally used
-    :param line: 
-    :return: 
-    """
-    line = re.sub('&', '& amp ;', line)
-    line = re.sub("`", "'", line)
-    line = re.sub(" ' re ", " 're ", line)
-    line = re.sub(" ' s ", " 's ", line)
-    line = re.sub('<', '& lt;', line)
-    return re.sub('>', '& gt ;', line)
 
 
 def create_bz2_file():
     """
-    Create a bz2 file for teh data from teh Chris paper
-    :param bz2_file_name:
+    Create a bz2 file for teh data from teh Reno Kriz paper
     :return:
     """
     with bz2.BZ2File(nnetFile, 'r') as handle:
         (invoc, _) = pickle.load(handle)
-    filenames, npars, sindlst = prepData.read_index_file(idx_file)
+    filenames, npars, sindlst = prepData.read_index_file(KRIZ_IDX_FILE)
     word_to_index = dict([(w, i) for i, w in enumerate(invoc)])
     pars = []
     for file in filenames:
@@ -305,17 +295,17 @@ def create_bz2_file():
             for p in ps:
                 for i in range(len(p)):
                     abs_id += 1
-                    p[i] = work_with_spacy(spacy_lines[abs_id])
+                    p[i] = spacy_lines[abs_id]
 
         pars += ps
     all_sents, _ = prepData.create_sentences(pars, word_to_index)
-    with bz2.BZ2File(bz2_file, 'w') as fd:
+    with bz2.BZ2File(KRIZ_BZ2_FILE, 'w') as fd:
         pickle.dump((invoc, all_sents), fd)
 
 
 if __name__ == "__main__":
     # create_spacy_corpus()
     detect_sentences()
-    compare_alignments()
+    compare_alignments(1)
     # create_idx_file()
     # create_bz2_file()

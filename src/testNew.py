@@ -29,7 +29,7 @@ from keras import initializers
 import keras.backend as K
 
 import h5py
-import search
+import utils_for_reno_kriz_data
 
 DEBUG = False
 DEBUG_SIZE = 11
@@ -41,7 +41,7 @@ MODEL_INPUT_FILE = path.NN_MODELS + MODEL_INPUT_NAME
 INPUT_DATA_FILE = path.nnetFile
 
 ## Input Data
-with bz2.BZ2File(search.bz2_file,'r') as handle:
+with bz2.BZ2File(utils_for_reno_kriz_data.bz2_file, 'r') as handle:
   # (voc,sentences) = pickle.load(handle)
   (voc
    , sentences) = pickle.load(handle)
