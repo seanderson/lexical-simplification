@@ -37,3 +37,4 @@ CHRIS_PAPER_FILE = USERDIR + \
 
 MORPH_ADORNER_TOOLKIT = BASEDIR + "/ghpaetzold-MorphAdornerToolkit-44bb87d/"    # can be downloaded from
     # http://ghpaetzold.github.io/MorphAdornerToolkit/
+NEWSELA_COMPLEX = USERDIR + "/corpora/newsela_complex/"

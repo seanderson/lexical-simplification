@@ -7,9 +7,22 @@ from lexenstein.identifiers import *
 from lexenstein.features import *
 from lexenstein.morphadorner import MorphAdornerToolkit
 import classpaths as paths
+from nltk.corpus import wordnet
 
 
-def main():
+def cwictorify(corpus):
+    # format: Sentence   word    indexInSent     BinaryIsComplex
+    input = open(corpus)
+    output = open()
+    for line in input:
+        list = line.split('\t')
+        print(line)
+
+    return output
+
+
+
+def main(corpus):
     m = MorphAdornerToolkit(paths.MORPH_ADORNER_TOOLKIT)
 
     fe = FeatureEstimator()
@@ -19,12 +32,10 @@ def main():
     # word freq (from google n-gram)
     # unique WordNet synsets
     # WordNet synonyms
-
-    mli = MachineLearningIdentifier(fe)
-    mli.trainSVM()
-
-    labels = mli.identifyComplexWords()
+    return fe.calculateFeatures(cwictorify(corpus), format='cwictor')
 
 
 if __name__ == '__main__':
-    main()
+    # main('train_cwictor_corpus.txt', 'test_cwictor_corpus.txt')
+    print(main(paths.NEWSELA_COMPLEX +
+               "Newsela_Complex_Words_Dataset_supplied.txt"))
