@@ -5,12 +5,18 @@ Module for searching for sentences in the newsela corpus
 from newselautil import *
 from classpaths import *
 import spacy
+import prepData
+import bz2
+import pickle
 import alignutils
 
+COMPLEX_SCORE = 6
 EXT = ".spacy"  # spaCy extension
 sentences = {}  # all of the sentences loaded as a dictionary
 # nlp = spacy.load('en_core_web_sm')
 # spaCy model that the authors of the article most likely used
+idx_file = "/home/nlp/newsela/data/test/paper.idx"
+bz2_file = "/home/nlp/newsela/data/test/paper.bz2"
 
 
 def create_spacy_corpus():
@@ -126,7 +132,7 @@ def detect_sentences():
               str(lines_total) + ' lines')
 
 
-def match_word(word, ind, alignemnt, original):
+def match_word(word, ind, score, alignemnt, original):
     """
     Try to match teh alignment outpu tand the output of the CHris paper.
     :param word:
@@ -138,6 +144,7 @@ def match_word(word, ind, alignemnt, original):
     word was found in the alignment output. The second is true if the word is
     considered complex by the alignments program
     """
+    alignemnt.converted_to_spacy = True
     word = word.lower()
     marked = alignemnt.mark_simplified(additionalTokenizer=False)
 
@@ -147,6 +154,8 @@ def match_word(word, ind, alignemnt, original):
             marked[ind] = marked[ind][1:-1]
             complex = True
         if marked[ind] == word:
+            if score >= COMPLEX_SCORE:
+                alignemnt.simplified[ind] = '_' + alignemnt.simplified[ind]
             return True, complex
 
     inverse_ind = len(original.split(' ')) - ind
@@ -155,6 +164,8 @@ def match_word(word, ind, alignemnt, original):
             marked[-inverse_ind] = marked[-inverse_ind][1:-1]
             complex = True
         if marked[-inverse_ind] == word:
+            if score >= COMPLEX_SCORE:
+                alignemnt.simplified[-inverse_ind] = '_' + alignemnt.simplified[-inverse_ind]
             return True, complex
 
     new_ind = -1
@@ -174,6 +185,8 @@ def match_word(word, ind, alignemnt, original):
     if new_ind == -1:
         # print("No instances")
         return False, False
+    if score >= COMPLEX_SCORE:
+        alignemnt.simplified[new_ind] = '_' + alignemnt.simplified[new_ind]
     return True, complex
 
 
@@ -206,14 +219,14 @@ def compare_alignments():
 
         if slug not in aligned_files:
             aligned_files[slug] = alignutils.get_aligned_sentences(
-                info, slug, 0, 1, use_spacy=True)
+                info, slug, 0, 2, use_spacy=True)
         slug_aligned = aligned_files[slug]
         for sent_al in slug_aligned:
             if sent_al.ind0 == s_ind:
                 if slug != prev[0] or s_ind != prev[1]:
                     sentences_aligned += 1
                 words_in_aligned_sentences += 1
-                matching = match_word(word, w_ind, sent_al, sent)
+                matching = match_word(word, w_ind, score, sent_al, sent)
                 if matching[0]:
                     words_aligned += 1
                     if matching[1]:
@@ -232,9 +245,77 @@ def compare_alignments():
         else:
             # print("Level " + str(i) + ": 0.0")
             break
+    return aligned_files
+
+
+def create_idx_file():
+    """
+    Create an idx file for the data from the Chris paper
+    :param idx_file_name:
+    :return:
+    """
+    with io.open(CHRIS_PAPER_FILE.split('.')[0] + '_supplied.txt') as file:
+        lines = file.readlines()
+    previous = ""
+    output = []
+    for line in lines:
+        filename = line.split('\t')[-2] + '.en.0'
+        if filename == previous:
+            continue
+        previous = filename
+        pars = getTokParagraphs({"filename": filename + ".txt"},
+                                separateBySemicolon=False)
+        info = [filename, str(len(pars))] + [str(len(x)) for x in pars]
+        output.append(' '.join(info))
+    with io.open(idx_file, 'w') as file:
+        file.writelines(str(len(output)) + '\n' + '\n'.join(output))
+
+
+def work_with_spacy(line):
+    """
+    Make changes to the line so that it looks as if spacy was originally used
+    :param line: 
+    :return: 
+    """
+    line = re.sub('&', '& amp ;', line)
+    line = re.sub("`", "'", line)
+    line = re.sub(" ' re ", " 're ", line)
+    line = re.sub(" ' s ", " 's ", line)
+    line = re.sub('<', '& lt;', line)
+    return re.sub('>', '& gt ;', line)
+
+
+def create_bz2_file():
+    """
+    Create a bz2 file for teh data from teh Chris paper
+    :param bz2_file_name:
+    :return:
+    """
+    with bz2.BZ2File(nnetFile, 'r') as handle:
+        (invoc, _) = pickle.load(handle)
+    filenames, npars, sindlst = prepData.read_index_file(idx_file)
+    word_to_index = dict([(w, i) for i, w in enumerate(invoc)])
+    pars = []
+    for file in filenames:
+        ps = getTokParagraphs({"filename": file + ".txt"},
+                                separateBySemicolon=False)
+        with open(path.BASEDIR + '/articles/' + file + '.txt.spacy') as spacy_file:
+            spacy_lines = spacy_file.readlines()
+            abs_id = -1
+            for p in ps:
+                for i in range(len(p)):
+                    abs_id += 1
+                    p[i] = work_with_spacy(spacy_lines[abs_id])
+
+        pars += ps
+    all_sents, _ = prepData.create_sentences(pars, word_to_index)
+    with bz2.BZ2File(bz2_file, 'w') as fd:
+        pickle.dump((invoc, all_sents), fd)
 
 
 if __name__ == "__main__":
     # create_spacy_corpus()
     detect_sentences()
     compare_alignments()
+    # create_idx_file()
+    # create_bz2_file()

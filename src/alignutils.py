@@ -8,6 +8,7 @@ from newselautil import *
 import classpaths as path
 import numpy
 import re
+import search
 
 
 class Alignment(object):
@@ -46,6 +47,8 @@ class Alignment(object):
         self.s_ind1 = s_ind1
         self.p_ind0 = p_ind0
         self.p_ind1 = p_ind1
+        self.simplified = None
+        self.converted_to_spacy = False
 
     def mark_simplified(self, no_stopwords=True, additionalTokenizer = True):
         """
@@ -76,12 +79,8 @@ class Alignment(object):
 
     def convert_to_spacy(self, spacy_lines):
         self.sent0 = spacy_lines[self.ind0]
-        self.sent0 = re.sub('&', '& amp ;', self.sent0)
-        self.sent0 = re.sub("`", "'", self.sent0)
-        self.sent0 = re.sub(" ' re ", " 're ", self.sent0)
-        self.sent0 = re.sub(" ' s ", " 's ", self.sent0)
-        self.sent0 = re.sub('<', '& lt;', self.sent0)
-        self.sent0 = re.sub('>', '& gt ;', self.sent0)
+        self.sent0 = search.work_with_spacy(self.sent0)
+        self.simplified = [x.lower() for x in self.sent0.split(' ')]
 
 
 def get_lowest_element_with_slug(slug, metafile):

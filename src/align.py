@@ -952,7 +952,7 @@ def sim_in_articles(slug, paragraphs, levels):
         write_result(slug, comp[0], comp[1], paragraphs)
 
 
-def align_first_n(nToAlign = -1, levels = [(0, 1, 3), (1, 2, 3), (2, 3, 2), (3, 4, 2), (4, 5, 2)]):
+def align_first_n(nToAlign = -1, levels = [(0, 1, 3), (1, 2, 3), (2, 3, 2), (3, 4, 2), (4, 5, 2)], start = ""):
     """
     Create alignments for the first nToAlign slugs. If nToAlign=-1, align all slugs.
     :param nToAlign: the number of slugs to align. If nToAlign = -1, all the slugs will be aligned
@@ -976,6 +976,10 @@ def align_first_n(nToAlign = -1, levels = [(0, 1, 3), (1, 2, 3), (2, 3, 2), (3, 
     while (i < len(info))and((nToAlign == -1)or(nSlugs < nToAlign)):
         artLow = i  # first article with this slug
        	slug = info[i]['slug']
+        if slug != start and start != "":
+            i += 1
+            continue
+        start = ""
         nSlugs += 1
         if nToAlign == -1:
             print("Processing slug... "+ slug+' '+str(round(i/float(len(info)) * 100, 3))+'% of the task completed')
@@ -1026,4 +1030,4 @@ if __name__ == "__main__":
     # align_particular(["cat-apathy"],[(0,3,2)])
     align_first_n(levels=[(0, 3, 3), (0, 1, 3), (0, 2, 3), (0, 4, 3), (1, 2, 3),
                           (1, 3, 3), (1, 4, 3), (2, 3, 3), (2, 4, 3),
-                          (3, 4, 3)])
+                          (3, 4, 3)], start="syrianrefugee-christmasgermany")

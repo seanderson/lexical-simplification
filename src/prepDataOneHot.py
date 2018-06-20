@@ -12,6 +12,7 @@ import nltk
 #import operator
 import theano
 import sys
+import classpaths as paths
 
 # seek digit in string
 RE_HASDIGIT = re.compile('\d')
@@ -374,31 +375,31 @@ def main():
     buildType = "NoOverlapRaw" # "DebugRaw"
     if buildType == "DebugRaw":
         lexsize = "1000"
-        trainSubset = 'data/trainArticleSubset.txt'
-        testSubset = 'data/testArticleSubset.txt'
-        vocFile = 'data/LexiconOneHot'+lexsize+'.pbz2'
-        trainFile = 'data/train/'+buildType+'Train.pbz2'
-        testFile = 'data/test/'+buildType+'Test.pbz2'
-        validFile = 'data/train/'+buildType+'Valid.pbz2'
-        idxFile = 'data/test/'+buildType+'Test.pbz2'
-        idxFile = 'data/test/DebugTest.idx'
-        idxValidFile = 'data/train/DebugValid.idx'
-    elif buildType == "NoOverlapRaw": # no word2vec embedding
+        trainSubset = paths.BASEDIR + '/data/trainArticleSubset.txt'
+        testSubset = paths.BASEDIR + '/data/testArticleSubset.txt'
+        vocFile = paths.BASEDIR + '/data/LexiconOneHot'+lexsize+'.pbz2'
+        trainFile = paths.BASEDIR + '/data/train/'+buildType+'Train.pbz2'
+        testFile = paths.BASEDIR + '/data/test/'+buildType+'Test.pbz2'
+        validFile = paths.BASEDIR + '/data/train/'+buildType+'Valid.pbz2'
+        idxFile = paths.BASEDIR + '/data/test/'+buildType+'Test.pbz2'
+        idxFile = paths.BASEDIR + '/data/test/DebugTest.idx'
+        idxValidFile = paths.BASEDIR + '/data/train/DebugValid.idx'
+    elif buildType == "NoOverlapRaw":  # no word2vec embedding
         lexsize = "19560"
         #lexsize = "1000"
-        trainSubset = 'data/trainArticles.txt'
-        testSubset = 'data/testArticles.txt'
-        vocFile = 'data/LexiconOneHotAll.pbz2'
-        trainFile = 'data/train/'+buildType+'Train.pbz2'
-        testFile = 'data/test/'+buildType+'Test.pbz2'
-        validFile = 'data/train/'+buildType+'Valid.pbz2'
-        idxFile = 'data/test/'+buildType+'Test.idx'
-        idxValidFile = 'data/train/'+buildType+'Valid.idx'
+        trainSubset = paths.BASEDIR + '/data/trainArticles.txt'
+        testSubset = paths.BASEDIR + '/data/testArticles.txt'
+        vocFile = paths.BASEDIR + '/data/LexiconOneHotAll.pbz2'
+        trainFile = paths.BASEDIR + '/data/train/'+buildType+'Train.pbz2'
+        testFile = paths.BASEDIR + '/data/test/'+buildType+'Test.pbz2'
+        validFile = paths.BASEDIR + '/data/train/'+buildType+'Valid.pbz2'
+        idxFile = paths.BASEDIR + '/data/test/'+buildType+'Test.idx'
+        idxValidFile = paths.BASEDIR + '/data/train/'+buildType+'Valid.idx'
     else:
         sys.exit(1)
 
     # One Hot vocab vectors
-    build_lexicon(vocFile,int(lexsize),trainSubset)
+    # build_lexicon(vocFile,int(lexsize),trainSubset)
     
     createTrainData(vocFile,trainFile,trainSubset,int(lexsize))
     createTestData(trainFile,testFile,idxFile,testSubset)

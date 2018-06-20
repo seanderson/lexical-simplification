@@ -29,6 +29,7 @@ from keras import initializers
 import keras.backend as K
 
 import h5py
+import search
 
 DEBUG = False
 DEBUG_SIZE = 11
@@ -40,7 +41,7 @@ MODEL_INPUT_FILE = path.NN_MODELS + MODEL_INPUT_NAME
 INPUT_DATA_FILE = path.nnetFile
 
 ## Input Data
-with bz2.BZ2File(INPUT_DATA_FILE,'r') as handle:
+with bz2.BZ2File(search.bz2_file,'r') as handle:
   # (voc,sentences) = pickle.load(handle)
   (voc
    , sentences) = pickle.load(handle)
@@ -87,7 +88,8 @@ model.summary()
 if DEBUG:
   probsfile = path.PREDICTIONS + MODEL_INPUT_NAME[:-5] + '-'+str(DEBUG_SIZE)+'probs.h5'
 else:
-  probsfile = path.PREDICTIONS + MODEL_INPUT_NAME[:-5] + '-probs.h5'
+  # probsfile = path.PREDICTIONS + MODEL_INPUT_NAME[:-5] + '-probs.h5'
+  probsfile = path.PREDICTIONS + 'paper-probs.h5'
 
 
 if DEBUG:

@@ -10,13 +10,14 @@ import utilsKeras as utils
 import h5py
 import pylab as pl
 import classpaths as path
+import search
 
 DEBUG = False
 count_total = 0
 count = 0
 
 
-def sentence_data(nnetfile, indexfile, probsfile, snum=-1):
+def sentence_data(nnetfile, indexfile, probsfile, snum=-1, chris_paper=False):
     """
     Get alignment output and match it with the output of the neural networks.
     Return two lists of probability values. One for words that are not
@@ -49,9 +50,14 @@ def sentence_data(nnetfile, indexfile, probsfile, snum=-1):
     complex = []
     word_freq = []
     predictions = utils.readProbs(h5fd)
+    if chris_paper:
+        all_alignments = search.compare_alignments()
     for i, art in enumerate(filenames[:]):
         slug, lang, lvl = art.split('.')
-        alignments = get_aligned_sentences(articles, slug, 0, 1)
+        if not chris_paper:
+            alignments = get_aligned_sentences(articles, slug, 0, 1)
+        else:
+            alignments = all_alignments[slug]
         if DEBUG:
             print (slug + '-' * 80)
         curr_al = 0  # the index of the next alignment to consider
@@ -78,7 +84,10 @@ def sentence_data(nnetfile, indexfile, probsfile, snum=-1):
                     if DEBUG:
                         print("No corresponding alignment\n")
                     continue
-                alignment = alignments[curr_al].mark_simplified()
+                if not chris_paper:
+                    alignment = alignments[curr_al].mark_simplified()
+                else:
+                    alignment = alignments[curr_al].simplified
                 if DEBUG:
                     print('Aligned sent:' + ' '.join(alignment) + "\n")
 
@@ -242,14 +251,18 @@ def find_spikes(frequencies, breakpoint):
     return spikes
 
 
-def main(probsFile, snum=-1):
+def main(probsFile, snum=-1, chris_paper = False):
     """
     Get various statistics for the probability file
     :param probsfile:
     :param snum: If snum!=-1, only the first snum sentences will be considered
     :return:
     """
-    data = sentence_data(path.nnetFile, path.indexFile, probsFile, snum)
+    if not chris_paper:
+        data = sentence_data(path.nnetFile, path.indexFile, probsFile, snum, chris_paper)
+    else:
+        data = sentence_data(search.bz2_file, search.idx_file, probsFile, snum,
+                             chris_paper)
     global count_total
     global count
     # print("Fraction is " + str(round(float(count / count_total), 3)))
@@ -261,19 +274,19 @@ def main(probsFile, snum=-1):
         round(float(len(data[1]))/(len(data[1]) + len(data[3])) * 100, 3)) + "% of times")
     # print(data[1])
     print("Plotting simple_correct")
-    pl.hist([x * 1000 for x in data[1]], bins=range(0, 1001, 1))
+    pl.hist([x * 100 for x in data[1]], bins=range(0, 101, 1))
     pl.show()
     print("Plotting complex_correct")
     # print(data[0])
-    pl.hist([x * 1000 for x in data[0]], bins=range(0, 1001, 1))
+    pl.hist([x * 100 for x in data[0]], bins=range(0, 101, 1))
     pl.show()
     print("Plotting simple_wrong")
     # print(data[3])
-    pl.hist([x * 1000 for x in data[3]], bins=range(0, 1001, 1))
+    pl.hist([x * 100 for x in data[3]], bins=range(0, 101, 1))
     pl.show()
     print("Plotting complex_wrong")
     # print(data[2])
-    pl.hist([x * 1000 for x in data[2]], bins=range(0, 1001, 1))
+    pl.hist([x * 100 for x in data[2]], bins=range(0, 101, 1))
     pl.show()
 
 
@@ -283,7 +296,8 @@ if __name__ == "__main__":
               "configurations, use:")
         print("python simpProbabilities.py [probability-file-name] "
               "[number-of-sentences-to-look-at]")
-        main(path.DEFAULT_MODEL_NAME)
+        # main(path.DEFAULT_MODEL_NAME)
+        main(path.PREDICTIONS + "paper-probs.h5", chris_paper=True)
     elif len(sys.argv) == 2:
         main(sys.argv[1])
     else:
