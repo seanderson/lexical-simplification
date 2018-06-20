@@ -93,7 +93,7 @@ def modify_the_header(line):
     return line
 
 
-def getTokParagraphs(article, separateBySemicolon=True, MODIFY_HEADER=True):
+def getTokParagraphs(article, separateBySemicolon=False, MODIFY_HEADER=False):
     """
     Return list of paragraphs.  Each par is a list of strings, each of
     which is an already tokenized sentence.  File suffix should be .tok

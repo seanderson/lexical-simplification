@@ -988,7 +988,11 @@ def align_first_n(nToAlign = -1, levels = [(0, 1, 3), (1, 2, 3), (2, 3, 2), (3, 
         while i < len(info) and slug == info[i]['slug']:
             i += 1
         artHi = i  # one more than the number of the highest article with this slug
-        sim_in_articles(slug, list(map(getTokParagraphs, info[artLow:artHi])), levels)  # the articles in the metafile
+        pars = []
+        for j in range(artLow, artHi):
+            pars.append(getTokParagraphs(info[j], separateBySemicolon=True,
+                                         MODIFY_HEADER=True))
+        sim_in_articles(slug, pars, levels)  # the articles in the metafile
         #  should be ordered by the slug and then by increasing the level of adaptation
 
 
@@ -1018,7 +1022,11 @@ def align_particular(slugs, levels=[(0, 1, 3), (1, 2, 3), (2, 3, 2), (3, 4, 2), 
         artHi = artLow
         while artHi < len(info) and slug == info[artHi]['slug']:
             artHi += 1
-        sim_in_articles(slug, list(map(getTokParagraphs, info[artLow:artHi])), levels)
+        pars = []
+        for j in range(artLow, artHi):
+            pars.append(getTokParagraphs(info[j], separateBySemicolon=True,
+                                         MODIFY_HEADER=True))
+        sim_in_articles(slug, pars, levels)  # the articles in the metafile
 
 
 if __name__ == "__main__":
