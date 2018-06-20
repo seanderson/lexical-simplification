@@ -3,6 +3,7 @@ Classifies words as complex or simple using methods based on Reno Kriz's
 Simplification Using Paraphrases and Context-based Lexical Substitution
 """
 
+import re
 from lexenstein.identifiers import *
 from lexenstein.features import *
 from lexenstein.morphadorner import MorphAdornerToolkit
@@ -26,17 +27,52 @@ def cwictorify(inputPath, outputPath):
     return outputPath
 
 
-def main(corpus, output):
+def collectData(corpus, output):
+    """
+
+    :param corpus:
+    :param output:
+    :return: -1 in list[3] if the word contains a non-ASCII char
+    """
     m = MorphAdornerToolkit(paths.MORPH_ADORNER_TOOLKIT)
 
+
     fe = FeatureEstimator()
-    # add features here
-    fe.addLengthFeature('Complexity')   # word length
+    fe.addLengthFeature('Complexity')  # word length
     fe.addSyllableFeature(m, 'Complexity')  # num syllables
-    # word freq (from google n-gram)
+    fe.addSynonymCountFeature('Simplicity')  # WordNet synonyms
+    list = fe.calculateFeatures(cwictorify(corpus, output), format='cwictor')
+
     # unique WordNet synsets
-    # WordNet synonyms
-    return fe.calculateFeatures(cwictorify(corpus,output), format='cwictor')
+    with open(output) as out:
+        lines = out.readlines()
+    for i in range(len(list)):
+        line = lines[i].split('\t')
+        if not re.match(r'.*[^ -~].*', line[1]):
+            list[i].append(len(wordnet.synsets(line[1])))
+        else:
+            list[i].append(-1)
+
+    # google 1-gram frequency
+    with open(paths.USERDIR + "/data/web1T/1gms/vocab") as file:
+        ngrams = file.readlines()
+    for lineNum in range(len(ngrams)):
+        ngrams[lineNum] = ngrams[lineNum].split('\t')
+    ngramDict = {x[0]: int(x[1]) for x in ngrams}
+    size = int(open(paths.USERDIR + "/data/web1T/1gms/total").read())
+    for i in range(len(list)):
+        line = lines[i].split('\t')
+        if(line[1] in ngramDict):
+            list[i].append(float(ngramDict[line[1]])/size)
+            #list[i].append(ngramDict[line[1]])
+        else:
+            list[i].append(-1)
+
+    return list
+
+
+def main(corpus, output):
+    return collectData(corpus, output)
 
 
 if __name__ == '__main__':
