@@ -27,7 +27,27 @@ def cwictorify(inputPath, outputPath):
     return outputPath
 
 
-def collectData(corpus, output):
+def save(data, outPath):
+    l =[]
+    with open(outPath, 'w') as out:
+        for line in data:
+            s = ''
+            for i in range(len(line)-1):
+                s += str(line[i]) + '\t'
+            s += str(line[len(line)-1])
+            l.append(s+'\n')
+        out.writelines(l)
+
+
+def count_sentence_syllables(data, mat):
+    input = []
+    for line in data:
+        for subst in line[3:len(line)]:
+            word = subst.strip().split(':')[1].strip()
+            input.append(word)
+
+
+def collect_data(corpus, output):
     """
 
     :param corpus:
@@ -43,39 +63,52 @@ def collectData(corpus, output):
     fe.addSynonymCountFeature('Simplicity')  # WordNet synonyms
     list = fe.calculateFeatures(cwictorify(corpus, output), format='cwictor')
 
-    # unique WordNet synsets
     with open(output) as out:
         lines = out.readlines()
-    for i in range(len(list)):
-        line = lines[i].split('\t')
-        if not re.match(r'.*[^ -~].*', line[1]):
-            list[i].append(len(wordnet.synsets(line[1])))
-        else:
-            list[i].append(-1)
+    with open(corpus) as corp:
+        orig = corp.readlines()
 
-    # google 1-gram frequency
+    # prep 1-gram dictionary
     with open(paths.USERDIR + "/data/web1T/1gms/vocab") as file:
         ngrams = file.readlines()
     for lineNum in range(len(ngrams)):
         ngrams[lineNum] = ngrams[lineNum].split('\t')
     ngramDict = {x[0]: int(x[1]) for x in ngrams}
     size = int(open(paths.USERDIR + "/data/web1T/1gms/total").read())
+
     for i in range(len(list)):
         line = lines[i].split('\t')
-        if(line[1] in ngramDict):
-            list[i].append(float(ngramDict[line[1]])/size)
-            #list[i].append(ngramDict[line[1]])
+        # unique WordNet synsets
+        if not re.match(r'.*[^ -~].*', line[1]):
+            list[i].append(len(wordnet.synsets(line[1])))
         else:
             list[i].append(-1)
+        # google 1-gram freq
+        if line[1] in ngramDict:
+            list[i].append(float(ngramDict[line[1]]) / size)
+            # list[i].append(ngramDict[line[1]])
+        else:
+            list[i].append(-1)
+        sOrig = [j.split('\t') for j in orig]
+        list[i].insert(0, line[2])
+        list[i].insert(0, sOrig[i][-1].strip('\n'))
+        list[i].insert(0, sOrig[i][-2])
+        list[i].insert(0, sOrig[i][0])
+
+    '''data = []
+    data.append([line.split('\t')[0].split(' ') for line in lines])
+    count_sentence_syllables(data, m)'''
 
     return list
 
 
 def main(corpus, output):
-    return collectData(corpus, output)
+    return collect_data(corpus, output)
 
 
 if __name__ == '__main__':
     # main('train_cwictor_corpus.txt', 'test_cwictor_corpus.txt')
-    print(main(paths.NEWSELA_COMPLEX +
+    data = (main(paths.NEWSELA_COMPLEX +
                "Newsela_Complex_Words_Dataset_supplied.txt", paths.NEWSELA_COMPLEX+"Cwictorified"))
+    save(data, paths.NEWSELA_COMPLEX + "testFeatClass.txt")
+    print (data)
