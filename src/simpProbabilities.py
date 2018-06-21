@@ -13,6 +13,15 @@ import classpaths as path
 import utils_for_reno_kriz_data
 
 DEBUG = False
+COMPLEX_BARRIER = 6
+# words with this score of higher in teh kriz paper are considered complex
+SIMPLE_BARRIER = 3
+# words with this score of lower in teh kriz paper are considered simple
+
+COMPLEX = 1
+SIMPLE = -1
+UNDEFINED = 0
+
 count_total = 0
 count = 0
 
@@ -51,13 +60,11 @@ def sentence_data(nnetfile, indexfile, probsfile, snum=-1, kriz_paper=False):
     word_freq = []
     predictions = utils.readProbs(h5fd)
     if kriz_paper:
-        all_alignments = utils_for_reno_kriz_data.compare_alignments()
+        all_sents = utils_for_reno_kriz_data.get_complexity_data()
     for i, art in enumerate(filenames[:]):
         slug, lang, lvl = art.split('.')
         if not kriz_paper:
             alignments = get_aligned_sentences(articles, slug, 0, 1)
-        else:
-            alignments = all_alignments[slug]
         if DEBUG:
             print (slug + '-' * 80)
         curr_al = 0  # the index of the next alignment to consider
@@ -68,9 +75,9 @@ def sentence_data(nnetfile, indexfile, probsfile, snum=-1, kriz_paper=False):
                 abs_id += 1
                 curr_id += 1
                 if abs_id == snum:
-                    return simple, complex
+                    return data
                 if len(predictions) <= abs_id:
-                    print "Error: Ran out of probabilities in sentenceData"
+                    print ("Error: Ran out of probabilities in sentenceData")
                     sys.exit(-1)
 
                 sent_begin_with_par = [invoc[y] for y in sentences[abs_id]][0] == PAR_START
@@ -79,30 +86,34 @@ def sentence_data(nnetfile, indexfile, probsfile, snum=-1, kriz_paper=False):
 
                 if DEBUG:
                     print('NN sent:' + ' '.join(nn_representation_of_sentence))
-                if curr_al >= len(alignments) or \
-                        alignments[curr_al].ind0 != curr_id:
+                if not kriz_paper and (curr_al >= len(
+                        alignments) or alignments[curr_al].ind0 != curr_id):
                     if DEBUG:
                         print("No corresponding alignment\n")
                     continue
                 if not kriz_paper:
                     alignment = alignments[curr_al].mark_simplified()
+                    aligned_len = len(alignment)
                 else:
-                    alignment = alignments[curr_al].simplified
-                if DEBUG:
-                    print('Aligned sent:' + ' '.join(alignment) + "\n")
+                    alignment = all_sents[slug + '.' + lang + '.' + lvl][curr_id]
+                    aligned_len = len(alignment[0])
 
-                aligned_len = len(alignment)
                 nn_len = len(nn_representation_of_sentence)
                 if (sent_begin_with_par and nn_len != aligned_len + 2) or \
                         (not sent_begin_with_par and nn_len != aligned_len + 1):
                     print "Error: Lengths are not equal"
                     print('NN sent:' + ' '.join(nn_representation_of_sentence))
-                    print('Aligned sent:' + ' '.join(alignment) + "\n")
+                    if not kriz_paper:
+                        print('Aligned sent:' + ' '.join(alignment) + "\n")
+                    else:
+                        print('Aligned sent:' + ' '.join(alignment[0]) + "\n")
                     print(str(nn_len) + " : " + str(aligned_len))
                     continue  # TODO: solve the problem with apostrophes
                     # sys.exit(-1)
-                tmp_data = analyze(alignment, nn_output,
-                                                  nn_representation_of_sentence, invoc)
+                if not kriz_paper:
+                    tmp_data = analyze(alignment, nn_output, nn_representation_of_sentence, invoc, is_complex_usual)
+                else:
+                    tmp_data = analyze(alignment[1], nn_output, nn_representation_of_sentence, invoc, is_complex_kriz)
                 data = [data[k] + tmp_data[k] for k in range(len(data))]
                 simple += data[1] + data[3]
                 complex += data[0] + data[2]
@@ -112,13 +123,40 @@ def sentence_data(nnetfile, indexfile, probsfile, snum=-1, kriz_paper=False):
     return data
 
 
-def analyze(aligned_output, nn_output, nn_representation_of_sentence, voc, topN=1):
+def is_complex_usual(word):
+    """
+    See description for analyze
+    :param word:
+    :return:
+    """
+    if word[0] == '_':
+        return COMPLEX
+    return SIMPLE
+
+
+def is_complex_kriz(word):
+    """
+    Version of is_complex for kriz data
+    :param word:
+    :return:
+    """
+    if word >= COMPLEX_BARRIER:
+        return COMPLEX
+    if SIMPLE_BARRIER >= word >= 0:
+        return SIMPLE
+    return UNDEFINED
+
+
+def analyze(aligned_output, nn_output, nn_representation_of_sentence, voc, is_complex, topN=3):
     """
     Given that aligned output and nn_output represent the same sentence,
     return the probabilities that the NN assigns to complex and simplified words
     :param aligned_output:
     :param nn_output:
     :param nn_representation_of_sentence:
+    :param is_complex: a function that returns COMPLEX, if the sentence is complex,
+                                               SIMPLE, if it is simple
+                                               UNDEFINED, if neither is the case
     :return:
     """
     offset = 0
@@ -130,10 +168,11 @@ def analyze(aligned_output, nn_output, nn_representation_of_sentence, voc, topN=
     # TODO: ALL of the unknown tags should be ignored
     for i in range(len(nn_representation_of_sentence)):
         word = nn_representation_of_sentence[i]
-        append_value = sum([x[0] for x in nn_output[i][1:topN+1]])
+        # append_value = sum([x[0] for x in nn_output[i][1:topN+1]])
+        append_value = nn_output[0][0]
 
-        if voc[int(nn_output[i][0][1])-1] == "@UNK" and voc[int(nn_output[i][0][1])-1] == "@NUM":
-            continue
+        # if voc[int(nn_output[i][0][1])-1] == "@UNK" and voc[int(nn_output[i][0][1])-1] == "@NUM":
+            # continue
         global count
         if voc[int(nn_output[i][0][1])-1] == u'``':
             count += 1
@@ -144,9 +183,11 @@ def analyze(aligned_output, nn_output, nn_representation_of_sentence, voc, topN=
                 # count += 1
             # count_total += 1
 
+        # print(voc[int(nn_output[i][0][1]) - 1] + " " + " " + voc[int(nn_output[i][1][1]) -1] + " " + str(lemmas_are_equal(nn_output[i][0][1],[nn_output[i][1][1]], voc)))
+
         if topN != 1:
             lemmas_equal = lemmas_are_equal(nn_output[i][0][1],
-                                        nn_output[i][1:topN + 1][1], voc)
+                                        [x[1] for x in nn_output[i][1:topN + 1]], voc)
         else:
             lemmas_equal = lemmas_are_equal(nn_output[i][0][1],
                                             [nn_output[i][1][1]], voc)
@@ -155,13 +196,13 @@ def analyze(aligned_output, nn_output, nn_representation_of_sentence, voc, topN=
         # elif not b:
             # b = True
             # continue
-        elif aligned_output[i - offset][0] == '_':
+        elif is_complex(aligned_output[i - offset]) == COMPLEX:
             # word is complex
             if lemmas_equal:
                 complex_correct.append(append_value)
             else:
                 complex_wrong.append(append_value)
-        else:
+        elif is_complex(aligned_output[i - offset]) == SIMPLE:
             # word is not complex
             if lemmas_equal:
                 simple_correct.append(append_value)
@@ -261,18 +302,27 @@ def main(probsFile, snum=-1, kriz_paper = False):
     if not kriz_paper:
         data = sentence_data(path.nnetFile, path.indexFile, probsFile, snum, kriz_paper)
     else:
-        data = sentence_data(utils_for_reno_kriz_data.bz2_file, utils_for_reno_kriz_data.idx_file, probsFile, snum,
+        data = sentence_data(path.KRIZ_BZ2_FILE, path.KRIZ_IDX_FILE, probsFile, snum,
                              kriz_paper)
     global count_total
     global count
     # print("Fraction is " + str(round(float(count / count_total), 3)))
     print("Count = " + str(count))
-    spikes = find_spikes(get_frequency(data), 2500)
-    print(spikes)
+    # spikes = find_spikes(get_frequency(data), 2500)
+    # print(spikes)
+    print([len(x) for x in data])
+    complex = data[0] + data[2]
+    simple = data[1] + data[3]
     print("Complex: correct " + str(round(float(len(data[0]))/(len(data[0]) + len(data[2])) * 100, 3)) + "% of times")
     print("Simple: correct " + str(
         round(float(len(data[1]))/(len(data[1]) + len(data[3])) * 100, 3)) + "% of times")
-    # print(data[1])
+    print(data[1])
+    print("Plotting complex")
+    pl.hist([x * 100 for x in complex], bins=range(0, 101, 1))
+    pl.show()
+    print("Plotting simple")
+    pl.hist([x * 100 for x in simple], bins=range(0, 101, 1))
+    pl.show()
     print("Plotting simple_correct")
     pl.hist([x * 100 for x in data[1]], bins=range(0, 101, 1))
     pl.show()

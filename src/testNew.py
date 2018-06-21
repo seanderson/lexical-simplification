@@ -38,10 +38,10 @@ MODEL_INPUT_NAME = sys.argv[1]
 MODEL_INPUT_FILE = path.NN_MODELS + MODEL_INPUT_NAME
 # INPUT_DATA_FILE = "./data/test/NoOverlapRawTest.pbz2"
 # INPUT_DATA_FILE = "./data/test/NewselaSimple03test.pbz2"
-INPUT_DATA_FILE = path.nnetFile
+INPUT_DATA_FILE = path.KRIZ_BZ2_FILE
 
 ## Input Data
-with bz2.BZ2File(utils_for_reno_kriz_data.bz2_file, 'r') as handle:
+with bz2.BZ2File(INPUT_DATA_FILE, 'r') as handle:
   # (voc,sentences) = pickle.load(handle)
   (voc
    , sentences) = pickle.load(handle)

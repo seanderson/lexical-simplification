@@ -5,7 +5,7 @@ Module for searching for sentences in the newsela corpus
 from newselautil import *
 from classpaths import *
 import spacy
-import prepData
+import prepDataOneHot as prepData
 import bz2
 import pickle
 import alignutils
@@ -153,31 +153,37 @@ def try_word(word, marked, ind):
     if marked[ind][0] == '_':
         marked[ind] = marked[ind][1:-1]
         complex = True
-    if marked[ind] == word:
+    if re.match('.*[^ -~].*', word):
+        print("Weird word: " + word)
+    elif marked[ind] == word:
         return True, complex
     return False, complex
 
 
-def match_word(word, ind, alignemnt, original):
+def match_word(word, ind, alignment, original):
     """
     Try to match teh alignment outpu tand the output of the Kriz paper.
     :param word:
     :param ind:     index of the word according to Reno Kriz paper data
     :param score:
-    :param alignemnt:
+    :param alignmentnt: list of tokens or an alignemnt object
     :param original:
-    :return: A tuple of two booleans. The first is True if the corresponding
-    word was found in the alignment output. The second is true if the word is
-    considered complex by the alignments program
+    :return: A tuple of two booleans and an integer. The first boolean is True
+    if the corresponding word was found in the alignment output. The second is
+    True if the word is considered complex by the alignments program. The
+    integer (can be negative) is the index of the word inside alignment
     """
     word = word.lower()
-    marked = alignemnt.mark_simplified(additionalTokenizer=False)
+    if isinstance(alignment, alignutils.Alignment):
+        marked = alignment.mark_simplified(additionalTokenizer=False)
+    else:
+        marked = alignment
     match, complex = try_word(word, marked, ind)
     if match:
-        return True, complex
+        return True, complex, ind
     match, complex = try_word(word, marked, ind - len(original.split(' ')))
     if match:
-        return True, complex
+        return True, complex, ind - len(original.split(' '))
 
     new_ind = -1
     i = 0
@@ -185,15 +191,15 @@ def match_word(word, ind, alignemnt, original):
         match, complex_candidate = try_word(word, marked, i)
         if match:
             if new_ind != -1:
-                # print("Two or more instances ")
-                return False, False
+                print("Two or more instances ")
+                return False, None, None
             complex = complex_candidate
             new_ind = i
         i += 1
     if new_ind == -1:
-        # print("No instances")
-        return False, False
-    return True, complex
+        print("No instances")
+        return False, None, None
+    return True, complex, new_ind
 
 
 def compare_alignments(level_to_compare):
@@ -289,23 +295,70 @@ def create_bz2_file():
     for file in filenames:
         ps = getTokParagraphs({"filename": file + ".txt"},
                                 separateBySemicolon=False)
-        with open(path.BASEDIR + '/articles/' + file + '.txt.spacy') as spacy_file:
+        """with open(path.BASEDIR + '/articles/' + file + '.txt.spacy') as spacy_file:
             spacy_lines = spacy_file.readlines()
             abs_id = -1
             for p in ps:
                 for i in range(len(p)):
                     abs_id += 1
-                    p[i] = spacy_lines[abs_id]
+                    p[i] = spacy_lines[abs_id].rstrip('\n ')"""
 
         pars += ps
-    all_sents, _ = prepData.create_sentences(pars, word_to_index)
+    # all_sents, _ = prepData.create_sentences(pars, word_to_index, tokenize=False)
+    all_sents, _ = prepData.create_sentences(pars, word_to_index,
+                                             tokenize=True)
     with bz2.BZ2File(KRIZ_BZ2_FILE, 'w') as fd:
         pickle.dump((invoc, all_sents), fd)
 
 
+def get_complexity_data():
+    """
+    This method is created to be used inside simpProbabilities.py. The method's
+    output is the quadruple list (first level is a dictionary).
+    result[filename_from_.idx][sent_id][1][word_id] is the word
+    result[filename_from_.idx][sent_id][1][word_id] is the complexity score
+    assigned to it
+    :return:
+    """
+    filenames, _, _ = prepData.read_index_file(KRIZ_IDX_FILE)
+    pars = {}
+
+    # loading spaCy sentences to pars
+    for file in filenames:
+        tokenized = getTokParagraphs({"filename": file + ".txt"},
+                                separateBySemicolon=False)
+        with open(path.BASEDIR + '/articles/' + file + '.txt.spacy') as spacy_file:
+            spacy_lines = spacy_file.readlines()
+        abs_id = -1
+        ps = []
+        for p in tokenized:
+            for i in range(len(p)):
+                abs_id += 1
+                # ps.append([[x.lower() for x in spacy_lines[abs_id].rstrip(' \n').split(' ')],
+                           # [-1 for x in spacy_lines[abs_id].split(' ')]])
+                ps.append([[x.lower() for x in tokenize(p[i])],
+                           [-1 for x in tokenize(p[i])]])
+        pars[file] = ps
+
+    # marking the words for which the complexity is known
+    with io.open(KRIZ_PAPER_FILE.split('.')[0] + '_supplied.txt') as file:
+        lines = file.readlines()
+    for line in lines:
+        word, w_ind, score, sent, slug, s_ind = line.rstrip('\n').split('\t')
+        w_ind = int(w_ind)
+        s_ind = int(s_ind)
+        score = int(score)
+        nn_sentence = pars[slug + '.en.0'][s_ind]
+        match, _, ind = match_word(word, w_ind, nn_sentence[0], sent)
+        if match:
+            nn_sentence[1][ind] = score
+
+    return pars
+
+
 if __name__ == "__main__":
     # create_spacy_corpus()
-    detect_sentences()
-    compare_alignments(1)
-    # create_idx_file()
-    # create_bz2_file()
+    # detect_sentences()
+    # compare_alignments(1)
+    create_idx_file()
+    create_bz2_file()

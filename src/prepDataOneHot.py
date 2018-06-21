@@ -192,7 +192,7 @@ def build_lexicon(outfile="lexNovec.pbz2",vocabsize=5000,art_subset=""):
         pickle.dump(vocab,fd)
 
 
-def create_sentences(pars,word_to_index):
+def create_sentences(pars,word_to_index, tokenize=True):
     '''Return list of all sentences, mapping words to vector index and
     dealing with sentencestart/unknown/numeric words.  Also returns
     list of [numsentences], one for each par.
@@ -205,7 +205,10 @@ def create_sentences(pars,word_to_index):
         index.append( len(p) )
         for s in p:
             line.append(word_to_index[SENT_START])
-            words = ns.tokenize(s) # list of words
+            if tokenize:
+                words = ns.tokenize(s)  # list of words
+            else:
+                words = s.split(' ')
             for w in words:
                 idx = word_to_index.get(w,UNK_IDX)
                 if idx == UNK_IDX: # try lower case match
