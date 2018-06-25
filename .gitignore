@@ -4,6 +4,10 @@ SRILM/
 models/
 data/
 predictions/
+monolingual-word-aligner/
+LEXenstein-2.1/
+kenlm/
+ghpaetzold-MorphAdornerToolkit-44bb87d/
 .idea/
 .ipynb_checkpoints/
 stanford-parser-full-2015-12-09/

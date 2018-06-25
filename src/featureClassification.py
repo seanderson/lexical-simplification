@@ -182,7 +182,7 @@ def test_classify(X, Y):
         test = available
         clf = classify(train)
         preds = clf.predict(test[0])
-        print("Testing: "+str(i)+" Out of "+numTimesToTest)
+        print("Testing: "+str(i)+" Out of "+str(numTimesToTest))
         for j in range(len(test[0])):
             check.append(preds[j] == test[1][j])
     numRight = 0
