@@ -147,7 +147,7 @@ def is_complex_kriz(word):
     return UNDEFINED
 
 
-def analyze(aligned_output, nn_output, nn_representation_of_sentence, voc, is_complex, topN=3):
+def analyze(aligned_output, nn_output, nn_representation_of_sentence, voc, is_complex, topN=1):
     """
     Given that aligned output and nn_output represent the same sentence,
     return the probabilities that the NN assigns to complex and simplified words
@@ -169,10 +169,10 @@ def analyze(aligned_output, nn_output, nn_representation_of_sentence, voc, is_co
     for i in range(len(nn_representation_of_sentence)):
         word = nn_representation_of_sentence[i]
         # append_value = sum([x[0] for x in nn_output[i][1:topN+1]])
-        append_value = nn_output[0][0]
+        append_value = nn_output[i][0][0]
 
-        # if voc[int(nn_output[i][0][1])-1] == "@UNK" and voc[int(nn_output[i][0][1])-1] == "@NUM":
-            # continue
+        if voc[int(nn_output[i][0][1])-1] == "@UNK" and voc[int(nn_output[i][0][1])-1] == "@NUM":
+            continue
         global count
         if voc[int(nn_output[i][0][1])-1] == u'``':
             count += 1
