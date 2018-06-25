@@ -358,7 +358,7 @@ def get_complexity_data():
 
 if __name__ == "__main__":
     # create_spacy_corpus()
-    # detect_sentences()
-    # compare_alignments(1)
-    create_idx_file()
-    create_bz2_file()
+    detect_sentences()
+    compare_alignments(3)
+    # create_idx_file()
+    # create_bz2_file()
