@@ -165,8 +165,11 @@ def test_classify(X, Y):
     check = []
     if len(X) != len(Y):
         return -1
+    if DEBUG:
+        X = X[:200]
+        Y = Y[:200]
     numTrain = int(.80 * len(X))
-    numTimesToTest = 1000
+    numTimesToTest = 100
     for i in range(numTimesToTest):
         available = [copy.copy(X), copy.copy(Y)]
         train = [[], []]
@@ -179,11 +182,14 @@ def test_classify(X, Y):
         test = available
         clf = classify(train)
         preds = clf.predict(test[0])
+        print("Testing: "+str(i)+" Out of "+numTimesToTest)
         for j in range(len(test[0])):
             check.append(preds[j] == test[1][j])
+    numRight = 0
     for i in check:
-        check[0] = check[0] and check[i]
-    return check[0]
+        if i == True:
+            numRight += 1
+    return float(numRight)/float(len(check))
 
 
 def main(corpus, output):
@@ -205,4 +211,5 @@ if __name__ == '__main__':
     featureData = read_features(paths.NEWSELA_COMPLEX + "testFeatClass.txt")
     complexScores = read_complexities(paths.NEWSELA_COMPLEX +
                                         "Newsela_Complex_Words_Dataset_supplied.txt")
-    clf = classify([featureData, complexScores])
+    #clf = classify([featureData, complexScores])
+    print(test_classify(featureData, complexScores))
