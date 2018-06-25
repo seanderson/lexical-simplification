@@ -21,8 +21,17 @@ TESTCLASSIFY = False
 IMPORTDATA = False
 DEBUG = False
 
+NEWSELLA_SUPPLIED = paths.NEWSELA_COMPLEX + "Newsela_Complex_Words_Dataset_supplied.txt"
+CWICTOIFIED = paths.NEWSELA_COMPLEX+"Cwictorified"
+SAVEFILE = paths.NEWSELA_COMPLEX + "testFeatClass.txt"
+
 
 def cwictorify(inputPath, outputPath):
+    """
+    Writes the file from inputPath in CWICTOR format
+    :param inputPath:
+    :param outputPath:
+    """
     # format: Sentence   word    indexInSent     BinaryIsComplex
     with open(inputPath) as file:
         input = file.readlines()
@@ -35,10 +44,14 @@ def cwictorify(inputPath, outputPath):
             else:
                 c = 0
             output.write(list[3]+"\t"+list[0]+"\t"+list[1]+"\t"+str(c)+"\n")
-    return outputPath
 
 
 def save(data, outPath):
+    """
+    Saves data to a file at outPath
+    :param data:
+    :param outPath:
+    """
     l =[]
     with open(outPath, 'w') as out:
         out.write('SentInd(Article)\tWordInd(Sentence)\tWordLength\tWordSyllables\tNumSynonyms\tNumSynsets\t1GramFreq\n')
@@ -52,6 +65,7 @@ def save(data, outPath):
 
 
 def count_sentence_syllables(data, mat):
+    # TODO add feature
     input = []
     for line in data:
         for subst in line[3:len(line)]:
@@ -60,6 +74,11 @@ def count_sentence_syllables(data, mat):
 
 
 def count_word_syllables(word):
+    """
+    Counts the syllables in a word
+    :param word: the word to be counted
+    :return: the number of syllables
+    """
     d = cmudict.dict()
     try:
         return [len(list(y for y in x if y[-1].isdigit())) for x in d[word.lower()]]
@@ -68,12 +87,13 @@ def count_word_syllables(word):
         return len(m.splitSyllables(word)[0].split('-'))
 
 
-def collect_data(corpus, output):
+def collect_data(corpusPath, CWPath):
     """
-
-    :param corpus:
-    :param output:
-    :return: -1 in list[3] if the word contains a non-ASCII char
+    Collects features from a corpus in CWICTOR format from a file at CWPath
+    and a file in Kriz format at corpusPath
+    :param corpusPath:
+    :param CWPath:
+    :return: the list of features
     """
     m = MorphAdornerToolkit(paths.MORPH_ADORNER_TOOLKIT)
 
@@ -81,11 +101,11 @@ def collect_data(corpus, output):
     fe.addLengthFeature('Complexity')  # word length
     #fe.addSyllableFeature(m, 'Complexity')  # num syllables
     fe.addSynonymCountFeature('Simplicity')  # WordNet synonyms
-    list = fe.calculateFeatures(cwictorify(corpus, output), format='cwictor')
+    list = fe.calculateFeatures(cwictorify(corpusPath, CWPath), format='cwictor')
 
-    with open(output) as out:
+    with open(CWPath) as out:
         lines = out.readlines()
-    with open(corpus) as corp:
+    with open(corpusPath) as corp:
         orig = corp.readlines()
 
     if(DEBUG):
@@ -135,6 +155,11 @@ def collect_data(corpus, output):
 
 
 def read_features(filepath):
+    """
+    Reads features from a file created with the save() function
+    :param filepath: the path to the file to read features from
+    :return: a list of the features
+    """
     data = []
     with open(filepath) as file:
         lines = file.readlines()
@@ -144,6 +169,11 @@ def read_features(filepath):
 
 
 def read_complexities(filepath):
+    """
+    reads Kriz complexity scores from a file at filepath
+    :param filepath:
+    :return: a list of complexity scores from the file at filepath
+    """
     complexities = []
     with open(filepath) as file:
         lines = file.readlines()
@@ -153,6 +183,11 @@ def read_complexities(filepath):
 
 
 def classify(data):
+    """
+    trains a SVM on data
+    :param data: the data to trian the SVM on. In format [X,Y]
+    :return: the trained SVM
+    """
     labels = numpy.zeros(len(data))
     for i in range(len(labels)):
         labels[i] = i
@@ -162,6 +197,12 @@ def classify(data):
 
 
 def test_classify(X, Y):
+    """
+    Tests the SVM
+    :param X: feature data
+    :param Y: label data
+    :return: a decmal frequency of correctly predicted answers
+    """
     check = []
     if len(X) != len(Y):
         return -1
@@ -169,7 +210,7 @@ def test_classify(X, Y):
         X = X[:200]
         Y = Y[:200]
     numTrain = int(.80 * len(X))
-    numTimesToTest = 100
+    numTimesToTest = 10
     for i in range(numTimesToTest):
         available = [copy.copy(X), copy.copy(Y)]
         train = [[], []]
@@ -201,15 +242,12 @@ if __name__ == '__main__':
         iris = datasets.load_iris()
         print(test_classify(iris.data, iris.target))
     if(CWICTORIFY):
-        cwictorify(paths.NEWSELA_COMPLEX + "Newsela_Complex_Words_Dataset_supplied.txt",
-               paths.NEWSELA_COMPLEX+"Cwictorified")
+        cwictorify(NEWSELLA_SUPPLIED, CWICTOIFIED)
     if(IMPORTDATA):
-        data = (main(paths.NEWSELA_COMPLEX +
-               "Newsela_Complex_Words_Dataset_supplied.txt", paths.NEWSELA_COMPLEX+"Cwictorified"))
-        save(data, paths.NEWSELA_COMPLEX + "testFeatClass.txt")
+        data = (main(NEWSELLA_SUPPLIED, CWICTOIFIED))
+        save(data, SAVEFILE)
         print (data)
-    featureData = read_features(paths.NEWSELA_COMPLEX + "testFeatClass.txt")
-    complexScores = read_complexities(paths.NEWSELA_COMPLEX +
-                                        "Newsela_Complex_Words_Dataset_supplied.txt")
+    featureData = read_features(SAVEFILE)
+    complexScores = read_complexities(NEWSELLA_SUPPLIED)
     #clf = classify([featureData, complexScores])
     print(test_classify(featureData, complexScores))
