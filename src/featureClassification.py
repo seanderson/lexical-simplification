@@ -2,7 +2,8 @@
 Classifies words as complex or simple using methods based on Reno Kriz's
 Simplification Using Paraphrases and Context-based Lexical Substitution
 """
-
+# TODO squish data from 0-1
+# TODO make features more modular
 import re
 from lexenstein.identifiers import *
 from lexenstein.features import *
@@ -22,8 +23,9 @@ IMPORTDATA = False
 DEBUG = False
 
 NEWSELLA_SUPPLIED = paths.NEWSELA_COMPLEX + "Newsela_Complex_Words_Dataset_supplied.txt"
-CWICTOIFIED = paths.NEWSELA_COMPLEX+"Cwictorified"
-SAVEFILE = paths.NEWSELA_COMPLEX + "testFeatClass.txt"
+CWICTOIFIED = paths.NEWSELA_COMPLEX + "Cwictorified.txt"
+SAVE_FILE = paths.NEWSELA_COMPLEX + "Feature_data.txt"
+GRAPH_FILE = paths.NEWSELA_COMPLEX + "Graph_output.txt"
 
 
 def cwictorify(inputPath, outputPath):
@@ -44,6 +46,7 @@ def cwictorify(inputPath, outputPath):
             else:
                 c = 0
             output.write(list[3]+"\t"+list[0]+"\t"+list[1]+"\t"+str(c)+"\n")
+    return outputPath
 
 
 def save(data, outPath):
@@ -54,7 +57,7 @@ def save(data, outPath):
     """
     l =[]
     with open(outPath, 'w') as out:
-        out.write('SentInd(Article)\tWordInd(Sentence)\tWordLength\tWordSyllables\tNumSynonyms\tNumSynsets\t1GramFreq\n')
+        out.write('SentInd(Article)\tWordInd(Sentence)\tWordLength\tNumSynonyms\tNumSynsets\tWordSyllables\t1GramFreq\n')
         for line in data:
             s = ''
             for i in range(len(line)-1):
@@ -62,28 +65,38 @@ def save(data, outPath):
             s += str(line[len(line)-1])
             l.append(s+'\n')
         out.writelines(l)
+    print("Data Saved")
 
 
-def count_sentence_syllables(data, mat):
-    # TODO add feature
-    input = []
-    for line in data:
-        for subst in line[3:len(line)]:
-            word = subst.strip().split(':')[1].strip()
-            input.append(word)
+def count_sentence_syllables(sent, d = cmudict.dict(), m = MorphAdornerToolkit(paths.MORPH_ADORNER_TOOLKIT)):
+    """
+    counts the number of syllables in words (strings separated by spaces that
+     contain letters) in a  given sentence
+    :param sent: the sentence as a string, punctuation separated by spaces
+    :return: the number of syllables
+    """
+    words = sent.split(' ')
+    syllables = 0
+    for word in words:
+        if re.match('.*[a-zA-Z].*', word):
+            try:
+                syllables += count_word_syllables(word, d, m)[0]
+            except:
+                syllables += count_word_syllables(word, d, m)
+        else:
+            words.remove(word)
+    return float(syllables)/float(len(words))
 
 
-def count_word_syllables(word):
+def count_word_syllables(word, d = cmudict.dict(), m = MorphAdornerToolkit(paths.MORPH_ADORNER_TOOLKIT)):
     """
     Counts the syllables in a word
     :param word: the word to be counted
     :return: the number of syllables
     """
-    d = cmudict.dict()
     try:
-        return [len(list(y for y in x if y[-1].isdigit())) for x in d[word.lower()]]
+        return [len(list(y for y in x if y[-1].isdigit())) for x in d[word.lower()]][0]
     except:
-        m = MorphAdornerToolkit(paths.MORPH_ADORNER_TOOLKIT)
         return len(m.splitSyllables(word)[0].split('-'))
 
 
@@ -95,13 +108,16 @@ def collect_data(corpusPath, CWPath):
     :param CWPath:
     :return: the list of features
     """
+    d = cmudict.dict()
     m = MorphAdornerToolkit(paths.MORPH_ADORNER_TOOLKIT)
 
     fe = FeatureEstimator()
     fe.addLengthFeature('Complexity')  # word length
-    #fe.addSyllableFeature(m, 'Complexity')  # num syllables
     fe.addSynonymCountFeature('Simplicity')  # WordNet synonyms
     list = fe.calculateFeatures(cwictorify(corpusPath, CWPath), format='cwictor')
+
+    sentenceSylbs = []
+    currentArticle = ""
 
     with open(CWPath) as out:
         lines = out.readlines()
@@ -113,6 +129,8 @@ def collect_data(corpusPath, CWPath):
         orig = orig[:100]
         list = list[:100]
 
+    sOrig = [j.split('\t') for j in orig]
+
     # prep 1-gram dictionary
     with open(paths.USERDIR + "/data/web1T/1gms/vocab") as file:
         ngrams = file.readlines()
@@ -121,31 +139,55 @@ def collect_data(corpusPath, CWPath):
     ngramDict = {x[0]: int(x[1]) for x in ngrams}
     size = int(open(paths.USERDIR + "/data/web1T/1gms/total").read())
 
+    # prep graph file
+    graphScores = []
+    with open(GRAPH_FILE) as file:
+        tmp = file.readlines()
+        tmp = tmp [1:]
+    for lineNum in range(len(tmp)):
+        tmp[lineNum] = tmp[lineNum].split('\t')
+        graphScores.append(tmp[lineNum][0])
+
+    print("files read")
+
     for i in range(len(list)):
         #print(i)
         line = lines[i].split('\t')
-        # number of syllables
-        try:
-            list[i].append(count_word_syllables(line[1])[0])
-        except:
-            list[i].append(count_word_syllables(line[1]))
         # unique WordNet synsets
         if not re.match(r'.*[^ -~].*', line[1]):
             list[i].append(len(wordnet.synsets(line[1])))
         else:
             list[i].append(-1)
+        #print("syn done")
+        # number of syllables
+        list[i].append(count_word_syllables(line[1], d, m))
+        #print("sylbs done")
+        # number of sentence syllable
+        index = int(sOrig[i][-1])
+        if currentArticle != sOrig[i][-2]:
+            currentArticle = sOrig[i][-2]
+            sentenceSylbs = []
+        while len(sentenceSylbs) < index+1:
+            sentenceSylbs.append(count_sentence_syllables(sOrig[i][3], d, m))
+        list[i].append(sentenceSylbs[index])
+        #print("sent sylbs done")
         # google 1-gram freq
         if line[1] in ngramDict:
             list[i].append(float(ngramDict[line[1]]) / size)
             # list[i].append(ngramDict[line[1]])
         else:
             list[i].append(-1)
-        sOrig = [j.split('\t') for j in orig]
+        #print("ngram done")
+        # graph score
+        list[i].append(graphScores[i])
+
         list[i].insert(0, line[2])
         list[i].insert(0, sOrig[i][-1].strip('\n'))
         list[i].insert(0, sOrig[i][-2])
         list[i].append(sOrig[i][0])
         # list.append(line[1])   #causes file to be unreadable?
+        if i % 50 == 0:
+            print(str(i) + " out of " + str(len(list)))
 
     '''data = []
     data.append([line.split('\t')[0].split(' ') for line in lines])
@@ -191,7 +233,7 @@ def classify(data):
     labels = numpy.zeros(len(data))
     for i in range(len(labels)):
         labels[i] = i
-    clf = svm.SVC(kernel='linear')
+    clf = svm.SVC(cache_size= 500, kernel='rbf')
     clf.fit(data[0], data[1])
     return clf
 
@@ -210,7 +252,7 @@ def test_classify(X, Y):
         X = X[:200]
         Y = Y[:200]
     numTrain = int(.80 * len(X))
-    numTimesToTest = 10
+    numTimesToTest = 1
     for i in range(numTimesToTest):
         available = [copy.copy(X), copy.copy(Y)]
         train = [[], []]
@@ -228,7 +270,7 @@ def test_classify(X, Y):
             check.append(preds[j] == test[1][j])
     numRight = 0
     for i in check:
-        if i == True:
+        if i:
             numRight += 1
     return float(numRight)/float(len(check))
 
@@ -245,9 +287,9 @@ if __name__ == '__main__':
         cwictorify(NEWSELLA_SUPPLIED, CWICTOIFIED)
     if(IMPORTDATA):
         data = (main(NEWSELLA_SUPPLIED, CWICTOIFIED))
-        save(data, SAVEFILE)
-        print (data)
-    featureData = read_features(SAVEFILE)
+        save(data, SAVE_FILE)
+        #print (data)
+    featureData = read_features(SAVE_FILE)
     complexScores = read_complexities(NEWSELLA_SUPPLIED)
     #clf = classify([featureData, complexScores])
     print(test_classify(featureData, complexScores))
