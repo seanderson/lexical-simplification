@@ -8,7 +8,7 @@ can be used to predict the relative complexity of a given pair of words
 import re
 import classpaths as paths
 import newselautil as ns
-from nltk.stem import WordNetLemmatizer;
+from nltk.stem import WordNetLemmatizer
 Lemmatizer = WordNetLemmatizer()
 
 SPPDB = paths.BASEDIR + "/SimplePPDB/simplification-dictionary"
@@ -19,156 +19,148 @@ OED = paths.BASEDIR + "/OED.txt"  # Source:
 OED_used = paths.BASEDIR + "/Simple_OED.txt"
 
 
-def test_sentence(sent_data, debug=False):
-    fail = 0
-    correct = 0
-    incorrect = 0
-    for i in range(len(sent_data)):
-        for j in range(i + 1, len(sent_data)):
-            diff = sent_data[i][1] - sent_data[j][1]
-            if diff > 0:
-                diff = 1
-            elif diff < 0:
-                diff = -1
+def test_sentence(data, limit, debug=False):
+    """
+    Test the performance of the graph on a sentence from the Kriz paper data.
+    :param data:  A list of tuples, where each tuple consists of two
+    elements. The first is a word (string corresponding to a node) and the
+    second is the complexity score assigned to it in the Kriz data.
+    :param limit: The length of that part of data for which the Kriz paper
+    has explicitly results
+    :param debug:
+    :return:
+    """
+    no_diff = 0    # number of times the Kriz paper assigns equal scores
+    fail = 0       # number of times (out of all - no_diff) the graph fails
+    #                to make a prediction
+    correct = 0    # number of times the graph makes a correct prediction
+    # correct means that the graph identifies what word is more complex
+    incorrect = 0  # number of times the graph makes an incorrect prediction
+    # no_diff + fail + correct + incorrect = sum(i) for i = 1 to len(data) - 1
+    for i in range(len(data)):
+        for j in range(i + 1, len(data)):
+            diff = data[i][1] - data[j][1]
+            if diff != 0:
+                diff = diff/abs(diff)  # 1 or -1
             else:
-                diff = 0
-            node1 = Node.get_node(sent_data[i][0])
-            node2 = Node.get_node(sent_data[j][0])
-            if not node1 or not node2 or diff == 0:
-                fail += 1
+                no_diff += 1
                 continue
-            score = Node.calculate_complexity(node1, node2)
+            score = Node.compare_two_words(data[i][0], data[j][0])
             if not score:
                 fail += 1
             elif score == diff:
                 correct += 1
             else:
                 incorrect += 1
-                # if debug:
-                    # print("\n\n " + node1.word + "\t" + node2.word + "\t" + str(
-                        # diff))
-                    # Node.DEBUG = True
-                    # Node.calculate_complexity(node1, node2)
-                    # Node.DEBUG = False
-    return fail, correct, incorrect
+                if debug:
+                    print("\n\n " + data[i][0] + "\t" + data[j][0]
+                          + "\t" + str(diff))
+                    Node.DEBUG = True
+                    Node.compare_two_words(data[i][0], data[j][0])
+                    Node.DEBUG = False
+    return no_diff, fail, correct, incorrect
 
 
-def evaluate_sentence(sent_data):
-    sent_data = [[x, 0, 0] for x in sent_data]
-    for i in range(len(sent_data)):
-        for j in range(i + 1, len(sent_data)):
-            node1 = Node.get_node(sent_data[i][0])
-            node2 = Node.get_node(sent_data[j][0])
-            if not node1 or not node2:
-                continue
-            complex = Node.calculate_complexity(node1, node2)
-            if complex:
-                sent_data[i][2] += 1
-                sent_data[i][2] += 1
-                if complex == 1:
-                    sent_data[i][1] += 1
+def evaluate_sentence(data, limit):
+    """
+    Get a metric of how complex the word is relative to its context by
+    calculating the number of words that are simpler than it and dividing this
+    value by the number of words it could be compared to
+    :param data: A list of words
+    :param limit: The length of that part of data for which the Kriz paper
+    has explicitly results
+    :return:
+    """
+    data = [[x[0], 0, 0] for x in data[:limit]]
+    # data[i][2] is the number of words that i-th word was compared to
+    # data[i][1] is the number of times the i-th word was more complex out of
+    # the data[i][2] comparisons
+    for i in range(len(data)):
+        for j in range(i + 1, len(data)):
+            score = Node.compare_two_words(data[i][0], data[j][0])
+            if score and score != 0:
+                data[i][2] += 1
+                data[i][2] += 1
+                if score == 1:
+                    data[i][1] += 1
                 else:
-                    sent_data[j][1] += 1
-    for i in range(len(sent_data)):
-        if sent_data[i][2] == 0:
-            sent_data[i] = [sent_data[i][0], 0]
+                    data[j][1] += 1
+    for i in range(len(data)):
+        if data[i][2] == 0:
+            data[i] = [data[i][0], 0]
         else:
-            sent_data[i] = [sent_data[i][0], float(sent_data[i][1])/sent_data[i][2]]
-    return sent_data
+            data[i] = [data[i][0], float(data[i][1])/data[i][2]]
+            # TODO: Perhaps, data[i][1] = pow(data[i][1], 2) would make sense
+    return data
 
 
-def evaluate_lines(sentences_file, features_file):
-    count = 0
-    with open(sentences_file) as file:
-        sents = file.readlines()
-    with open(features_file) as file:
-        features = file.readlines()
-        for i in range(len(features)):
-            features[i] = features[i].rstrip('\n').split('\t')
-    s_i = 0
-    f_i = 1
-    while s_i < len(sents):
-        sent_data = []
-        if s_i % 2 == 0:
-            print("Progress: " + str(round(float(s_i) / len(sents) * 100, 3)) + "%")
-        word, w_i, _, sent, art, indx = sents[s_i].rstrip('\n').split('\t')
-        previous = (sent, art, indx)
-        while sent == previous[0]:
-            if not re.match('.*[^a-zA-Z].*', word):
-                word = Lemmatizer.lemmatize(word.lower())
-                sent_data.append(word)
-            s_i += 1
-            if s_i == len(sents):
-                break
-            word, w_i, _, sent, art, indx = sents[s_i].rstrip('\n').split('\t')
-        all_sent = [x for x in sent_data]
-        for word in previous[0].split(' '):
-            if re.match('.*[^a-zA-Z].*', word) or word in ns.STOPWORDS:
-                continue
-            word = Lemmatizer.lemmatize(word.lower())
-            if word not in all_sent:
-                sent_data.append(word)
-        sent_data = evaluate_sentence(sent_data)
-        j = 0
-        while f_i < len(features) and features[f_i][0] == previous[1] and features[f_i][1] == previous[2]:
-            match = features[f_i][-1].rstrip('\n').lower()
-            if re.match('.*[^a-zA-Z].*', match):
-                print("Not lemmatizable: " + match)
-                features[f_i].insert(-1, '0')
-            else:
-                match = Lemmatizer.lemmatize(match)
-                while sent_data[j][0] != match:
-                    j += 1
-                count += 1
-                features[f_i].insert(-1, str(sent_data[j][1]))
-            f_i += 1
-    print("Count, length: " + str([count, len(features)]))
-    features = '\n'.join(['\t'.join(x) for x in features])
-    with open(features_file, 'w') as file:
-        file.writelines(features)
-
-
-def process_lines(lines, train_rather_than_test, debug=True):
+def process_lines(lines, function, debug=False, print_progress=50):
+    """
+    Iterate over the lines from teh Kriz paper and apply a function to them
+    :param function:
+    :param lines:
+    :param debug:
+    :param print_progress: if debug, print progress each print_progress lines
+    :return:
+    """
     i = 0
-    fail = 0
-    correct = 0
-    incorrect = 0
+    result = []
     while i < len(lines):
-        if debug and not train_rather_than_test and i % 10 == 0:
+        if debug and i % 10 == 0:
             print("Progress: " + str(round(float(i)/len(lines) * 100, 3)) + "%")
         sent_data = []
         word, _, score, sent = lines[i].rstrip('\n').split('\t')
         score = int(score)
         previous = sent
         while sent == previous:
-            if re.match('.*[^a-zA-Z].*', word):
-                if not debug:
-                    print("Word has non ASCII characters in it: " + word)
-            else:
-                word = Lemmatizer.lemmatize(word.lower())
-                sent_data.append((word, score))
+            word = word.lower()
+            if not re.match('.*[^a-zA-Z].*', word):
+                word = Lemmatizer.lemmatize(word)
+            sent_data.append((word, score))
             i += 1
             if i == len(lines):
                 break
             word, _, score, sent = lines[i].rstrip('\n').split('\t')
             score = int(score)
-        all_sent = [x[0] for x in sent_data]
+        marked_words = [x[0] for x in sent_data]
+        # words for which the complexity is explicitly stated
         for word in previous.split(' '):
             if re.match('.*[^a-zA-Z].*', word) or word in ns.STOPWORDS:
                 continue
             word = Lemmatizer.lemmatize(word.lower())
-            if word not in all_sent:
+            if word not in marked_words:
                 sent_data.append((word, 0))
-        if train_rather_than_test:
-            Node.add_data(sent_data)
-        else:
-            f, c, ic = test_sentence(sent_data)
-            fail += f
-            correct += c
-            incorrect += ic
-    if not train_rather_than_test:
-        Node.all_nodes = {}
-        return fail, correct, incorrect
+        result.append(function(sent_data, len(marked_words)))
+    return result
+
+
+def test(lines):
+    """
+    Test the algorithm on the lines from the Kriz paper. The meaning of the
+    result is explained in teh docstring for test_sentence
+    :param lines:
+    :return:
+    """
+    result = process_lines(lines, test_sentence)
+    no_diff = sum([x[0] for x in result])
+    fail = sum([x[1] for x in result])
+    correct = sum([x[2] for x in result])
+    incorrect = sum([x[3] for x in result])
+    return no_diff, fail, correct, incorrect
+
+
+def evaluate(lines):
+    """
+    Use the algorithm to assess the complexity of words in Kriz data
+    :param lines:
+    :return:
+    """
+    result = process_lines(lines, evaluate_sentence())
+    output = []
+    for sent in result:
+        for word in sent:
+            output.append(str(word[1]))
+    return output
 
 
 def create_simple_PPDB():
@@ -400,13 +392,14 @@ class Node:
         return Node.all_nodes[word]
 
     @staticmethod
-    def add_data(data):
+    def add_data(data, _=None):
         """
         Add different connections to the graph
         :param data: A list of tuples, where each tuple consists of two
         elements. The first is a word (string corresponding to a node) and the
         second is the complexity score assigned to it. The difference between
         the complexity scores of two words will be the weight of an edge
+        :param _: a dummy parameter.
         :return:
         """
         for i in range(len(data)):
@@ -419,46 +412,69 @@ class Node:
                     Node.get_node(data[j][0], True).add(
                         Node.get_node(data[i][0], True), diff)
 
+    @staticmethod
+    def compare_two_words(word1, word2):
+        node1 = Node.get_node(word1)
+        node2 = Node.get_node(word2)
+        if not node1 or not node2:
+            return None
+        return node1.compare_to(node2)
 
-def main(fraction):
-    # print('Creating PPDB...')
-    # create_simple_ppdb()
+
+def main(fraction, test_data=True, output_file=None):
+    """
+    Process the Kriz data
+    :param fraction: if fraction != 1, do a 1/fraction - fold testing
+    :param test_data: if True, test the performance right away.
+                      if False, output the evaluations to a file
+    :param output_file:
+    :return:
+    """
     with open(paths.KRIZ_PAPER_FILE) as file:
         lines = file.readlines()
     fr_size = int(fraction * len(lines))
+    if not test_data and output_file is None:
+        print("Please, provide an output file")
+        return
+    output = []
     for i in range(int(1/fraction)):
-        train = lines[0: i * fr_size] + lines[(i + 1) * fr_size:]
-        test = lines[i * fr_size: (i + 1) * fr_size]
+        training_set = lines[0: i * fr_size] + lines[(i + 1) * fr_size:]
+        testing_set = lines[i * fr_size: (i + 1) * fr_size]
         print('\nLoading PPDB...')
         load_simple_PPDB()
         print('Loading OED...')
         load_simple_OED()
-        print('Loading newsela data...')
-        process_lines(train, True)
+        if fr_size != len(lines):
+            print('Loading newsela data...')
+            process_lines(training_set, Node.add_data)
         Node.contract_data()
-        print('Testing...')
-        fail, correct, incorr = process_lines(test, False)
-        print('Run #' + str(i) + ': f, c, i = ' + str([fail, correct, incorr]))
+        print('Computing...')
+        if test_data:
+            output.append(test(testing_set))
+            print('Run #' + str(i) + ': n, f, c, i = ' + str(output[-1]))
+        else:
+            output += evaluate(testing_set)
+            print('Run #' + str(i) + ' completed')
+    if test_data:
+        no_diff = sum([x[0] for x in output])
+        fail = sum([x[1] for x in output])
+        correct = sum([x[2] for x in output])
+        incorrect = sum([x[3] for x in output])
+        total = no_diff + fail + correct + incorrect
+        tried = fail + correct + incorrect
+        tested = correct + incorrect
+        print("Total: " + str(total) + ". Tried to test: " + str(tried) + " (" +
+              str(round(float(tried)/ total * 100, 2)) + "%)")
+        print("Managed to test: " + str(tested) + " (" + str(round(float(
+            tested) / tried * 100, 2)) + "% out of that tried)")
+        print("Correct: " + str(correct) + " (" + str(round(float(
+            correct) / tested * 100, 2)) + "% out of that tested)")
+    else:
+        with open(output_file, 'w') as file:
+            file.writelines('\n'.join(output))
 
 
 if __name__ == "__main__":
-    create_simple_PPDB()
-    # main(0.2)
+    # create_simple_PPDB()
     # create_simple_OED()
-    # print('\nLoading PPDB...')
-    # load_simple_ppdb()
-    # print('Loading OED...')
-    # load_simple_OED()
-    # Node.contract_data()
-    # print('Testing...')
-    # evaluate_lines(paths.NEWSELA_COMPLEX + "/Newsela_Complex_Words_Dataset_supplied.txt",
-    #               paths.NEWSELA_COMPLEX + "/testFeatClass.txt")
-    """ with open(paths.NEWSELA_COMPLEX + "/testFeatClass_copy.txt") as file:
-        lines = file.readlines()
-    for i in range(len(lines)):
-        lines[i] = lines[i].split("\t")[-2] + "\t" + lines[i].split('\t')[-1]
-    with open(paths.NEWSELA_COMPLEX + "/testFeatClass.txt", "w") as file:
-        file.writelines(lines) """
-
-
-
+    main(0.2, test_data=True)
