@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+
 '''
 Train LSTM-RNN to predict next word.
 Built from trainEmbedSpot.  This version does NOT use
@@ -6,6 +7,7 @@ word2vec vectors.
 
 USAGE: train MODEL DATE
 '''
+
 import sys
 import os
 import time
@@ -21,14 +23,14 @@ from subprocess import call
 import keras
 from keras.models import Sequential
 from keras import layers
-from keras.layers import Dense, Activation,SimpleRNN,Embedding
+from keras.layers import Dense, Activation, SimpleRNN, Embedding
 from keras.optimizers import RMSprop
 from keras import initializers
 
 import keras.backend as K
 
 
-DEBUG = True  # Debug version for quicker testing
+DEBUG = False  # Debug version for quicker testing
 INPUT_DATA_FILE = "../data/train/NoOverlapRawTrain.pbz2"
 VALID_DATA_FILE = "../data/train/NoOverlapRawValid.pbz2"
 # INPUT_DATA_FILE = VALID_DATA_FILE  # Is it for debugging??

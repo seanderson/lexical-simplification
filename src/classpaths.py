@@ -24,7 +24,7 @@ TOKENIZERPROG = 'custom/Tokenizer'
 
 MODELS = 'edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz'
 
-CLASSPATH = ':'.join(['.',PARSERDIR,PARSERDIR + 'stanford-parser.jar', PARSERDIR + 'stanford-parser-3.6.0-models.jar', PARSERDIR + 'slf4j-api.jar'])
+CLASSPATH = ':'.join(['.',PARSERDIR,PARSERDIR + 'stanford-parser.jar', PARSERDIR + 'stanford-parser-3.6.0-models.jar', PARSERDIR + 'slf4j-api.jar', BASEDIR + '/stanford-postagger/stanford-postagger.jar'])
 
 PREDICTIONS = BASEDIR + "/predictions/"
 NN_MODELS = BASEDIR + "/models/"
