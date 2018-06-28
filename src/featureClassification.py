@@ -2,9 +2,9 @@
 Classifies words as complex or simple using methods based on Reno Kriz's
 Simplification Using Paraphrases and Context-based Lexical Substitution
 """
-# TODO squish data from 0-1
 # TODO make features more modular
 import re
+import numpy
 from lexenstein.identifiers import *
 from lexenstein.features import *
 from lexenstein.morphadorner import MorphAdornerToolkit
@@ -13,6 +13,8 @@ from nltk.corpus import wordnet
 from nltk.corpus import cmudict
 from sklearn import datasets
 from sklearn import svm
+from sklearn import preprocessing
+from sklearn.model_selection import cross_val_score
 import copy
 import random
 
@@ -57,7 +59,8 @@ def save(data, outPath):
     """
     l =[]
     with open(outPath, 'w') as out:
-        out.write('SentInd(Article)\tWordInd(Sentence)\tWordLength\tNumSynonyms\tNumSynsets\tWordSyllables\t1GramFreq\n')
+        out.write('ArticleName SentInd(Article) WordInd(Sentence) WordLength ' +
+                  'NumSynonyms NumSynsets WordSyllables 1GramFreq GraphScore AvgSentSylbs SentLength AvgWordLen AvgNumSynonyms AvgNumSynsets Avg1GramFreq\n')
         for line in data:
             s = ''
             for i in range(len(line)-1):
@@ -98,6 +101,97 @@ def count_word_syllables(word, d = cmudict.dict(), m = MorphAdornerToolkit(paths
         return [len(list(y for y in x if y[-1].isdigit())) for x in d[word.lower()]][0]
     except:
         return len(m.splitSyllables(word)[0].split('-'))
+
+
+def calc_sent_len(sent):
+    """
+    Calculates the number of words in a sentence
+    :param sent: the sentence as a string
+    :return: the number of words in sent
+    """
+    words = sent.split(' ')
+    length = 0
+    for word in words:
+        if re.match('.*[a-zA-Z].*', word):
+            length += 1
+    return length
+
+
+def calc_avg_word_lens(sent):
+    """
+    Calculates the average length of the words in a sentence
+    :param sent: the sentence as a string
+    :return: the average number of letters in the words in sent
+    """
+    words = sent.split(' ')
+    totalLen = 0
+    for word in words:
+        if re.match('.*[a-zA-Z].*', word):
+            totalLen += len(word)
+        else:
+            words.remove(word)
+    return float(totalLen) / float(len(words))
+
+
+def calc_syn_avgs(sent):
+    """
+    Calculates the average number of synonyms of the words in a sentence. Will
+    skip words that contain characters unreadable by wordnet
+    :param sent: the sentence as a string
+    :return: the  average number of synonyms of the words in sent
+    """
+    words = sent.split(' ')
+    totalSyns = 0
+    for word in words:
+        if re.match('.*[a-zA-Z].*', word):
+            if not re.match(r'.*[^ -~].*', word):
+                for syn in wordnet.synsets(word):
+                    totalSyns += len(syn.lemmas())
+            else:
+                print(word)
+        else:
+            words.remove(word)
+    return float(totalSyns) / float(len(words))
+
+
+def calc_synset_avgs(sent):
+    """
+    Calculates the average number of synsets of the words in a sentence. Will
+    skip words that contain characters unreadable by wordnet
+    :param sent: the sentence as a string
+    :return: the  average number of synsets of the words in sent
+    """
+    words = sent.split(' ')
+    totalSets = 0
+    for word in words:
+        if re.match('.*[a-zA-Z].*', word):
+            if not re.match('.*[^ -~].*', word):
+                totalSets += len(wordnet.synsets(word))
+            else:
+                print(word)
+        else:
+            words.remove(word)
+    return float(totalSets) / float(len(words))
+
+
+def calc_nGram_avgs(sent, ngramDict, size):
+    """
+    calculates the average google 1-gram frequencies of the words in a sentence
+    :param sent: the sentence as a string
+    :param ngramDict: a dictionary of {word, number of appearances in google 
+        1-gram}
+    :param size: the total number of the appearances of all words in the 1-gram
+    :return: he average google 1-gram frequencies of the words in sent
+    """
+    words = sent.split(' ')
+    totalAvg = 0
+    for word in words:
+        if re.match('.*[a-zA-Z].*', word):
+            if word in ngramDict:
+                totalAvg += float(ngramDict[word]) / size
+        else:
+            words.remove(word)
+    return float(totalAvg) / float(len(words))
 
 
 def collect_data(corpusPath, CWPath):
@@ -153,33 +247,55 @@ def collect_data(corpusPath, CWPath):
     for i in range(len(list)):
         #print(i)
         line = lines[i].split('\t')
+        
         # unique WordNet synsets
         if not re.match(r'.*[^ -~].*', line[1]):
             list[i].append(len(wordnet.synsets(line[1])))
         else:
-            list[i].append(-1)
-        #print("syn done")
+            list[i].append(0)
         # number of syllables
         list[i].append(count_word_syllables(line[1], d, m))
-        #print("sylbs done")
-        # number of sentence syllable
-        index = int(sOrig[i][-1])
-        if currentArticle != sOrig[i][-2]:
-            currentArticle = sOrig[i][-2]
-            sentenceSylbs = []
-        while len(sentenceSylbs) < index+1:
-            sentenceSylbs.append(count_sentence_syllables(sOrig[i][3], d, m))
-        list[i].append(sentenceSylbs[index])
-        #print("sent sylbs done")
         # google 1-gram freq
         if line[1] in ngramDict:
             list[i].append(float(ngramDict[line[1]]) / size)
             # list[i].append(ngramDict[line[1]])
         else:
-            list[i].append(-1)
-        #print("ngram done")
+            list[i].append(0)
+
         # graph score
         list[i].append(graphScores[i])
+
+        #reset sentence features
+        index = int(sOrig[i][-1])
+        if currentArticle != sOrig[i][-2]:
+            currentArticle = sOrig[i][-2]
+            sentenceSylbs = []
+            sentLens = []
+            wordLenAvgs = []
+            synonymCountAvgs = []
+            synsetNumAvgs = []
+            nGramFreqAvgs = []
+        # update sentence features
+        while len(sentenceSylbs) < index+1:
+            sentenceSylbs.append(count_sentence_syllables(sOrig[i][3], d, m))
+            sentLens.append(calc_sent_len(sOrig[i][3]))
+            wordLenAvgs.append(calc_avg_word_lens(sOrig[i][3]))
+            synonymCountAvgs.append(calc_syn_avgs(sOrig[i][3]))
+            synsetNumAvgs.append(calc_synset_avgs(sOrig[i][3]))
+            nGramFreqAvgs.append(calc_nGram_avgs(sOrig[i][3], ngramDict, size))
+
+        # number of sentence syllables
+        list[i].append(sentenceSylbs[index])
+        # sent length
+        list[i].append(sentLens[index])
+        # avg length of words in sentence
+        list[i].append(wordLenAvgs[index])
+        # avg synonym count in sentence
+        list[i].append(synonymCountAvgs[index])
+        # avg num synsets in sentence
+        list[i].append(synsetNumAvgs[index])
+        # avg word 1-gram freq in sentence
+        list[i].append(nGramFreqAvgs[index])
 
         list[i].insert(0, line[2])
         list[i].insert(0, sOrig[i][-1].strip('\n'))
@@ -227,12 +343,12 @@ def read_complexities(filepath):
 def classify(data):
     """
     trains a SVM on data
-    :param data: the data to trian the SVM on. In format [X,Y]
+    :param data: the data to train the SVM on. In format [X,Y]
     :return: the trained SVM
     """
-    labels = numpy.zeros(len(data))
+    '''labels = numpy.zeros(len(data))
     for i in range(len(labels)):
-        labels[i] = i
+        labels[i] = i'''
     clf = svm.SVC(cache_size= 500, kernel='rbf')
     clf.fit(data[0], data[1])
     return clf
@@ -254,7 +370,10 @@ def test_classify(X, Y):
     numTrain = int(.80 * len(X))
     numTimesToTest = 1
     for i in range(numTimesToTest):
-        available = [copy.copy(X), copy.copy(Y)]
+        temp = list(zip(copy.copy(X), copy.copy(Y)))
+        random.shuffle(temp)
+        tempX, tempY = zip(*temp)
+        available = [tempX, tempY]
         train = [[], []]
         for j in range(numTrain):
             index = random.randint(0, len(available[0])-1)
@@ -262,7 +381,9 @@ def test_classify(X, Y):
             train[1].append(available[1][index])
             numpy.delete(available[0], index)
             numpy.delete(available[1], index)
-        test = available
+        scaler = preprocessing.StandardScaler()
+        train = [scaler.fit_transform(np.asarray(train[0]).astype(np.float)), train[1]]
+        test = [scaler.transform(np.asarray(available[0]).astype(np.float)), available[1]]
         clf = classify(train)
         preds = clf.predict(test[0])
         print("Testing: "+str(i)+" Out of "+str(numTimesToTest))
@@ -274,6 +395,53 @@ def test_classify(X, Y):
             numRight += 1
     return float(numRight)/float(len(check))
 
+
+def five_fold_test(X, Y):
+    check = []
+    if len(X) != len(Y):
+        return -1
+    if DEBUG:
+        X = X[:200]
+        Y = Y[:200]
+    numTrain = int(.80 * len(X))
+    numTimesToTest = 5
+    temp = list(zip(copy.copy(X), copy.copy(Y)))
+    random.shuffle(temp)
+    tempX, tempY = zip(*temp)
+    available = [tempX, tempY]
+    n = len(available[0]) / numTimesToTest
+    fifths = [[[],[]], [[],[]], [[],[]], [[],[]], [[],[]]]
+    for i in range(numTimesToTest):
+        fifths[i][0] = available[0][n*i:n*(i+1)]
+        fifths[i][1] = available[1][n*i:n*(i+1)]
+    for i in range(numTimesToTest):
+        test = fifths[i]
+        train = []
+        for fifth in fifths:
+            if fifths[i] != fifth:
+                train += fifth
+        scaler = preprocessing.StandardScaler()
+        train = [scaler.fit_transform(np.asarray(train[0]).astype(np.float)),
+                 train[1]]
+        test = [scaler.transform(np.asarray(available[0]).astype(np.float)),
+                available[1]]
+        clf = classify(train)
+        preds = clf.predict(test[0])
+        print("Testing: " + str(i) + " Out of " + str(numTimesToTest))
+        for j in range(len(test[0])):
+            check.append(preds[j] == test[1][j])
+    numRight = 0
+    for i in check:
+        if i:
+            numRight += 1
+    return float(numRight) / float(len(check))
+
+
+def temp_kfold_test(X,Y):
+    clf = svm.SVC(cache_size= 500, kernel='rbf')
+    scores = cross_val_score(clf, X, Y, cv=5)
+    return scores
+        
 
 def main(corpus, output):
     return collect_data(corpus, output)
@@ -291,5 +459,6 @@ if __name__ == '__main__':
         #print (data)
     featureData = read_features(SAVE_FILE)
     complexScores = read_complexities(NEWSELLA_SUPPLIED)
-    #clf = classify([featureData, complexScores])
-    print(test_classify(featureData, complexScores))
+    #print(test_classify(featureData, complexScores))
+    #print(temp_kfold_test(featureData, complexScores))
+    print(five_fold_test(featureData, complexScores))

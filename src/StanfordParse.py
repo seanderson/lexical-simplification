@@ -21,9 +21,9 @@ def tokenize(textfile):
 
 
 def tag(textfile):
-    output = subprocess.check_output(['java', '-mx7168m','-cp',path.CLASSPATH, "edu.stanford.nlp.tagger.maxent.MaxentTagger", "-model", '/home/nlp/newsela/stanford-postagger/models/english-bidirectional-distsim.tagger', "-textFile", textfile], shell=False)
+    result = subprocess.check_output(['java', '-mx2048m','-cp',path.CLASSPATH, "edu.stanford.nlp.tagger.maxent.MaxentTagger", "-model", '/home/nlp/newsela/stanford-postagger/models/english-bidirectional-distsim.tagger', "-textFile", textfile], shell=False)
     with open(textfile + ".tagged", 'w') as file:
-        file.writelines(output)
+        file.writelines(result)
 
 
 def tag_all(folder_in, folder_out):
@@ -35,7 +35,9 @@ def tag_all(folder_in, folder_out):
     with open(folder_in + "/metadata.txt") as file:
         lines = file.readlines()
     for i in range(len(lines)):
-        line = "/" + lines[i].rstrip('\n')
+        if (float(i) / len(lines) < 0.1):
+            continue
+        line = "/" + lines[len(lines)-i-1].rstrip('\n')
         print("Tagging: " + folder_in + line)
         output = subprocess.check_output(
             ['java', '-mx7168m', '-cp', path.CLASSPATH,
