@@ -2,7 +2,6 @@
 Classifies words as complex or simple using methods based on Reno Kriz's
 Simplification Using Paraphrases and Context-based Lexical Substitution
 """
-# TODO make features more modular
 import re
 import numpy
 from lexenstein.identifiers import *
@@ -22,6 +21,7 @@ import random
 CWICTORIFY = False
 TESTCLASSIFY = False
 IMPORTDATA = False
+BINARY_CATEGORIZATION = True
 DEBUG = False
 
 NEWSELLA_SUPPLIED = paths.NEWSELA_COMPLEX + "Newsela_Complex_Words_Dataset_supplied.txt"
@@ -312,18 +312,32 @@ def collect_data(corpusPath, CWPath):
     return list
 
 
-def read_features(filepath):
+def read_features(filepath, featureConfig=-1):
     """
     Reads features from a file created with the save() function
     :param filepath: the path to the file to read features from
+    :param featureConfig: an array of booleans with length of data indicating
+    whether to read that feature
     :return: a list of the features
     """
     data = []
     with open(filepath) as file:
         lines = file.readlines()
     for line in lines:
-        data.append(line.split('\t')[2:-1])
-    return data[1:]
+        data.append(line.split('\t')[3:-1])
+    data = data[1:]
+    if featureConfig == -1 or len(featureConfig) != len(data[0]):
+        return data
+    for featureSetInd in range(len(data)):
+        featureSet = data[featureSetInd]
+        featureInd = 0
+        while featureInd < len(data[featureSetInd]):
+            if not featureConfig[featureInd]:
+                # print(featureInd, len(data[featureSetInd]))
+                featureSet.remove(data[featureSetInd][featureInd])
+            featureInd += 1
+        data[featureSetInd] = featureSet
+    return data
 
 
 def read_complexities(filepath):
@@ -346,10 +360,8 @@ def classify(data):
     :param data: the data to train the SVM on. In format [X,Y]
     :return: the trained SVM
     """
-    '''labels = numpy.zeros(len(data))
-    for i in range(len(labels)):
-        labels[i] = i'''
-    clf = svm.SVC(cache_size= 500, kernel='rbf')
+    # TODO implement GridSearchCV
+    clf = svm.SVC(C=100.0, cache_size= 500, gamma='auto', kernel='rbf')
     clf.fit(data[0], data[1])
     return clf
 
@@ -396,40 +408,135 @@ def test_classify(X, Y):
     return float(numRight)/float(len(check))
 
 
+def str_to_bin_category(item):
+    """
+    Classifies item as either simple 's' or complex 'c'
+    :param item: a number from 0-9
+    :return: either 's' or 'c' depending on if item is less than 3
+    """
+    item = int(item)
+    if item < 3:
+        return 's'
+    else:
+        return 'c'
+
+
 def five_fold_test(X, Y):
-    check = []
+    print("Initializing Test")
+    results = [[], []]
     if len(X) != len(Y):
         return -1
     if DEBUG:
         X = X[:200]
         Y = Y[:200]
-    numTrain = int(.80 * len(X))
     numTimesToTest = 5
+    # shuffle data
     temp = list(zip(copy.copy(X), copy.copy(Y)))
     random.shuffle(temp)
     tempX, tempY = zip(*temp)
     available = [tempX, tempY]
+    if(BINARY_CATEGORIZATION):
+        available[1] = map(str_to_bin_category, available[1])
+    else:
+        available[1] = map(int, available[1])
+    # print(calc_num_in_categories(available[1]))
+
+    # split into fifths
     n = len(available[0]) / numTimesToTest
     fifths = [[[],[]], [[],[]], [[],[]], [[],[]], [[],[]]]
     for i in range(numTimesToTest):
         fifths[i][0] = available[0][n*i:n*(i+1)]
         fifths[i][1] = available[1][n*i:n*(i+1)]
+
     for i in range(numTimesToTest):
+        print("Testing: " + str(i) + " Out of " + str(numTimesToTest))
         test = fifths[i]
         train = []
-        for fifth in fifths:
-            if fifths[i] != fifth:
-                train += fifth
+        for j in range(len(fifths)):
+            if i != j:
+                train += fifths[j]
+        # standardize feature data
         scaler = preprocessing.StandardScaler()
         train = [scaler.fit_transform(np.asarray(train[0]).astype(np.float)),
                  train[1]]
-        test = [scaler.transform(np.asarray(available[0]).astype(np.float)),
-                available[1]]
+        test = [scaler.transform(np.asarray(test[0]).astype(np.float)),
+                test[1]]
+        #SVM
+        #clf = LogisticRegression()
+        #clf.fit(train[0], train[1])
         clf = classify(train)
         preds = clf.predict(test[0])
-        print("Testing: " + str(i) + " Out of " + str(numTimesToTest))
-        for j in range(len(test[0])):
-            check.append(preds[j] == test[1][j])
+        # results.append(calc_percent_right(test, preds))
+        results[0] = np.append(results[0], preds)
+        results[1] = np.append(results[1], test[1])
+    return results
+
+
+def process_results(results):
+    simpleCorrect = []
+    simpleIncorrect = []
+    complexCorrect = []
+    complexIncorrect = []
+    for i in range(len(results[0])):
+        right = int(results[1][i])
+        pred = int(results[0][i])
+        if right < 3:
+            if pred < 3:
+                simpleCorrect.append([pred, right])
+            else:
+                simpleIncorrect.append([pred, right])
+        else:
+            if pred >= 3:
+                complexCorrect.append([pred, right])
+            else:
+                complexIncorrect.append([pred, right])
+    data = [simpleCorrect, simpleIncorrect, complexCorrect, complexIncorrect]
+    return data
+
+
+def process_results_bin(results):
+    simpleCorrect = []
+    simpleIncorrect = []
+    complexCorrect = []
+    complexIncorrect = []
+    for i in range(len(results[0])):
+        right = results[1][i]
+        pred = results[0][i]
+        if right == 's':
+            if pred == 's':
+                simpleCorrect.append([pred,right])
+            else:
+                simpleIncorrect.append([pred,right])
+        else:
+            if pred == 'c':
+                complexCorrect.append([pred,right])
+            else:
+                complexIncorrect.append([pred,right])
+    data = [simpleCorrect, simpleIncorrect, complexCorrect, complexIncorrect]
+    return data
+
+
+def temp_kfold_test(X,Y):
+    clf = svm.SVC(cache_size= 500, kernel='rbf')
+    scores = cross_val_score(clf, X, Y, cv=5)
+    return scores
+
+
+def calc_num_in_categories(l):
+    categories = []
+    for num in l:
+        while len(categories) < num:
+            categories.append(0)
+        categories[num] += 1
+    return categories
+
+
+def calc_percent_right(processedDataCategory):
+    if len(processedDataCategory) == 0:
+        return 0
+    check = []
+    for j in range(len(processedDataCategory)):
+        check.append(processedDataCategory[j][0] == processedDataCategory[j][1])
     numRight = 0
     for i in check:
         if i:
@@ -437,28 +544,61 @@ def five_fold_test(X, Y):
     return float(numRight) / float(len(check))
 
 
-def temp_kfold_test(X,Y):
-    clf = svm.SVC(cache_size= 500, kernel='rbf')
-    scores = cross_val_score(clf, X, Y, cv=5)
-    return scores
-        
+def calc_avg_percent_right(pData):
+    avg = 0
+    for i in range(len(pData)):
+        avg += calc_percent_right(pData[i])
+    avg /= i
+    return avg
 
-def main(corpus, output):
-    return collect_data(corpus, output)
+
+def calc_percent_categorically_right(pData):
+    return float(len(pData[0])+len(pData[2])) /\
+           float(sum([len(category) for category in pData]))
+
+
+def calc_precision(pData):
+    return float(len(pData[2])) /\
+           float(len(pData[2])+len(pData[1]))
+
+
+def calc_recall(pData):
+    return float(len(pData[2])) / \
+           float(len(pData[2]) + len(pData[3]))
+
+
+def calc_f_measure(precision, recall):
+    return 2*precision*recall/(precision + recall)
 
 
 if __name__ == '__main__':
     if(TESTCLASSIFY):
         iris = datasets.load_iris()
-        print(test_classify(iris.data, iris.target))
+        rawDat = five_fold_test(iris.data, iris.target)
+        processedData = []
+        for i in range(len(rawDat[0])):
+            processedData.append([rawDat[0][i],rawDat[1][i]])
+        print(calc_percent_right(processedData))
     if(CWICTORIFY):
         cwictorify(NEWSELLA_SUPPLIED, CWICTOIFIED)
     if(IMPORTDATA):
-        data = (main(NEWSELLA_SUPPLIED, CWICTOIFIED))
+        data = (collect_data(NEWSELLA_SUPPLIED, CWICTOIFIED))
         save(data, SAVE_FILE)
         #print (data)
-    featureData = read_features(SAVE_FILE)
-    complexScores = read_complexities(NEWSELLA_SUPPLIED)
-    #print(test_classify(featureData, complexScores))
-    #print(temp_kfold_test(featureData, complexScores))
-    print(five_fold_test(featureData, complexScores))
+    if not TESTCLASSIFY:
+        # config = [True, True, True, True, True, False, False, False, False, False, False, False]
+        config = [True, True, True, True, True, True, True, True, True, True, True, True]
+        featureData = read_features(SAVE_FILE, config)
+        complexScores = read_complexities(NEWSELLA_SUPPLIED)
+        #print(test_classify(featureData, complexScores))
+        #print(temp_kfold_test(featureData, complexScores))
+        rawDat = five_fold_test(featureData, complexScores)
+        if(BINARY_CATEGORIZATION):
+            processedData = process_results_bin(rawDat)
+        else:
+            processedData = process_results(rawDat)
+        precision = calc_precision(processedData)
+        recall = calc_recall(processedData)
+        print([len(category) for category in processedData])
+        print(calc_percent_categorically_right(processedData))
+        print(precision, recall, calc_f_measure(precision, recall))
