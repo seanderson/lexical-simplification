@@ -14,6 +14,7 @@ from sklearn import datasets
 from sklearn import svm
 from sklearn import preprocessing
 from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import  GridSearchCV
 import copy
 import random
 
@@ -21,6 +22,7 @@ import random
 CWICTORIFY = False
 TESTCLASSIFY = False
 IMPORTDATA = False
+GRIDSEARCH = False
 BINARY_CATEGORIZATION = True
 DEBUG = False
 
@@ -43,7 +45,7 @@ def cwictorify(inputPath, outputPath):
         for line in input:
             list = line.split('\t')
             #print(list)
-            if list[2] > 3:
+            if int(list[2]) > 3:
                 c = 1
             else:
                 c = 0
@@ -244,6 +246,7 @@ def collect_data(corpusPath, CWPath):
 
     print("files read")
 
+    # append lines
     for i in range(len(list)):
         #print(i)
         line = lines[i].split('\t')
@@ -360,8 +363,8 @@ def classify(data):
     :param data: the data to train the SVM on. In format [X,Y]
     :return: the trained SVM
     """
-    # TODO implement GridSearchCV
-    clf = svm.SVC(C=100.0, cache_size= 500, gamma='auto', kernel='rbf')
+    clf = svm.SVC(C=1.0, cache_size=500, gamma=.1, kernel='rbf')
+    #clf = svm.SVC(kernel='rbf', C=1, verbose=False, probability=False, degree=3, shrinking=True, max_iter = -1, decision_function_shape='ovr', random_state=None, tol=0.001, cache_size=200, coef0=0.0, gamma=0.1, class_weight=None)
     clf.fit(data[0], data[1])
     return clf
 
@@ -422,6 +425,12 @@ def str_to_bin_category(item):
 
 
 def five_fold_test(X, Y):
+    """
+    Scales data and does a five-fold test on it
+    :param X: feature data
+    :param Y: classifications
+    :return: [predicted categorizations, actual categorizations]
+    """
     print("Initializing Test")
     results = [[], []]
     if len(X) != len(Y):
@@ -461,7 +470,7 @@ def five_fold_test(X, Y):
                  train[1]]
         test = [scaler.transform(np.asarray(test[0]).astype(np.float)),
                 test[1]]
-        #SVM
+        # SVM
         #clf = LogisticRegression()
         #clf.fit(train[0], train[1])
         clf = classify(train)
@@ -473,6 +482,11 @@ def five_fold_test(X, Y):
 
 
 def process_results(results):
+    '''
+    reformats results into a confusion matrix
+    :param results: [predicted categorizations, actual categorizations]
+    :return: confusion matrix split into one list
+    '''
     simpleCorrect = []
     simpleIncorrect = []
     complexCorrect = []
@@ -495,6 +509,12 @@ def process_results(results):
 
 
 def process_results_bin(results):
+    """
+    A version of process_results that uses 's' and 'c' rather than comparing
+    the category to 3
+    :param results: [predicted categorizations, actual categorizations]
+    :return: confusion matrix split into one list
+    """
     simpleCorrect = []
     simpleIncorrect = []
     complexCorrect = []
@@ -517,12 +537,24 @@ def process_results_bin(results):
 
 
 def temp_kfold_test(X,Y):
+    """
+    tests scikit-learn's n-fold testing
+    :param X:
+    :param Y:
+    :return:
+    """
     clf = svm.SVC(cache_size= 500, kernel='rbf')
+    X = preprocessing.scale(X)
     scores = cross_val_score(clf, X, Y, cv=5)
     return scores
 
 
 def calc_num_in_categories(l):
+    """
+    counts frequesncy of occurrence in a list of ints
+    :param l: list of ints
+    :return: list of occurrence where l[i] = index
+    """
     categories = []
     for num in l:
         while len(categories) < num:
@@ -532,6 +564,11 @@ def calc_num_in_categories(l):
 
 
 def calc_percent_right(processedDataCategory):
+    """
+    calculates the % right from a list [predicted category, actual category]
+    :param processedDataCategory:
+    :return:
+    """
     if len(processedDataCategory) == 0:
         return 0
     check = []
@@ -561,7 +598,7 @@ def calc_precision(pData):
     return float(len(pData[2])) /\
            float(len(pData[2])+len(pData[1]))
 
-
+svc = svm.SVC()
 def calc_recall(pData):
     return float(len(pData[2])) / \
            float(len(pData[2]) + len(pData[3]))
@@ -569,6 +606,17 @@ def calc_recall(pData):
 
 def calc_f_measure(precision, recall):
     return 2*precision*recall/(precision + recall)
+
+
+def grid_search(X, Y):
+    print('doing grid search')
+    parameters = {'kernel': ['rbf'], 'C': [.01, .1, 1, 10, 100, 1000],
+                  'gamma': [.001,.01,.1,1,10,100,1000]}
+    X = preprocessing.scale(X)
+    svc = svm.SVC()
+    clf = GridSearchCV(svc, parameters, verbose=3, n_jobs=4)
+    clf.fit(X,Y)
+    return clf.best_score_, clf.best_estimator_.get_params()
 
 
 if __name__ == '__main__':
@@ -586,12 +634,14 @@ if __name__ == '__main__':
         save(data, SAVE_FILE)
         #print (data)
     if not TESTCLASSIFY:
-        # config = [True, True, True, True, True, False, False, False, False, False, False, False]
-        config = [True, True, True, True, True, True, True, True, True, True, True, True]
+        config = [True, True, True, True, True, False, False, False, False, False, False, False]
+        # config = [True, True, True, True, True, True, True, True, True, True, True, True]
         featureData = read_features(SAVE_FILE, config)
         complexScores = read_complexities(NEWSELLA_SUPPLIED)
         #print(test_classify(featureData, complexScores))
         #print(temp_kfold_test(featureData, complexScores))
+        if (GRIDSEARCH):
+            print(grid_search(featureData,complexScores))
         rawDat = five_fold_test(featureData, complexScores)
         if(BINARY_CATEGORIZATION):
             processedData = process_results_bin(rawDat)
