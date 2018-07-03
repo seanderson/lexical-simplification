@@ -608,26 +608,37 @@ def calc_percent_categorically_right(pData):
 
 
 def calc_precision(pData):
+    if len(pData[2]) == 0 or len(pData[1]) == 0:
+        return 0
     return float(len(pData[2])) /\
            float(len(pData[2])+len(pData[1]))
 
 
 def calc_recall(pData):
+    if len(pData[2]) == 0 or len(pData[3]) == 0:
+        return 0
     return float(len(pData[2])) / \
            float(len(pData[2]) + len(pData[3]))
 
 
 def calc_f_measure(precision, recall):
+    if precision + recall == 0:
+        return -1
     return 2*precision*recall/(precision + recall)
 
 
-def custom_f1_scorer(y, y_pred, unk):
+def custom_f1_scorer(y, y_pred, **kwargs):
     data = process_results_bin([y_pred,y])
-    return calc_f_measure(calc_precision(data),calc_recall(data))
+    precision = calc_recall(data)
+    recall = calc_recall(data)
+    return calc_f_measure(precision, recall)
 
 
 def grid_search(X, Y):
     print('doing grid search')
+    if(BINARY_CATEGORIZATION):
+        for i in range(len(Y)):
+            Y[i] = str_to_bin_category(Y[i])
     parameters = {'kernel': ['rbf'], 'C': [.01, .1, 1, 10, 100, 1000],
                   'gamma': [.001,.01,.1,1,10,100,1000]}
     if(DEBUG):
@@ -635,8 +646,9 @@ def grid_search(X, Y):
     scaler = preprocessing.StandardScaler()
     X = scaler.fit_transform(X)
     svc = svm.SVC()
-    scorer = make_scorer(f1_score, labels=['c'], average=None)
-    clf = GridSearchCV(svc, parameters, scoring=custom_f1_scorer, verbose=3, n_jobs=7)
+    #scorer = make_scorer(f1_score, labels=['c'], average=None)
+    scorer = make_scorer(custom_f1_scorer, labels=['c'], average=None)
+    clf = GridSearchCV(svc, parameters, scoring=scorer, verbose=3, n_jobs=7)
     clf.fit(X,Y)
     return clf.best_score_, clf.best_estimator_.get_params()
 
