@@ -14,7 +14,9 @@ from sklearn import datasets
 from sklearn import svm
 from sklearn import preprocessing
 from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import  GridSearchCV
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import f1_score
+from sklearn.metrics import make_scorer
 import copy
 import random
 
@@ -22,7 +24,7 @@ import random
 CWICTORIFY = False
 TESTCLASSIFY = False
 IMPORTDATA = False
-GRIDSEARCH = False
+GRIDSEARCH = True
 BINARY_CATEGORIZATION = True
 DEBUG = False
 
@@ -260,8 +262,8 @@ def collect_data(corpusPath, CWPath):
         list[i].append(count_word_syllables(line[1], d, m))
         # google 1-gram freq
         if line[1] in ngramDict:
-            list[i].append(float(ngramDict[line[1]]) / size)
-            # list[i].append(ngramDict[line[1]])
+            #list[i].append(float(ngramDict[line[1]]) / size)
+            list[i].append(ngramDict[line[1]])
         else:
             list[i].append(0)
 
@@ -424,6 +426,15 @@ def str_to_bin_category(item):
         return 'c'
 
 
+def test_scaling():
+    array = np.array([], [], [])
+    for sub in array:
+        for i in range(4):
+            sub.append(numpy.random.randint(0,40))
+    scaler = preprocessing.StandardScaler()
+    stdScaled = scaler.fit_transform(array)
+
+
 def five_fold_test(X, Y):
     """
     Scales data and does a five-fold test on it
@@ -440,6 +451,7 @@ def five_fold_test(X, Y):
         Y = Y[:200]
     numTimesToTest = 5
     # shuffle data
+    preprocessing.scale(X)
     temp = list(zip(copy.copy(X), copy.copy(Y)))
     random.shuffle(temp)
     tempX, tempY = zip(*temp)
@@ -460,10 +472,11 @@ def five_fold_test(X, Y):
     for i in range(numTimesToTest):
         print("Testing: " + str(i) + " Out of " + str(numTimesToTest))
         test = fifths[i]
-        train = []
+        train = [[],[]]
         for j in range(len(fifths)):
             if i != j:
-                train += fifths[j]
+                train[0] += fifths[j][0]
+                train[1] += fifths[j][1]
         # standardize feature data
         scaler = preprocessing.StandardScaler()
         train = [scaler.fit_transform(np.asarray(train[0]).astype(np.float)),
@@ -598,7 +611,7 @@ def calc_precision(pData):
     return float(len(pData[2])) /\
            float(len(pData[2])+len(pData[1]))
 
-svc = svm.SVC()
+
 def calc_recall(pData):
     return float(len(pData[2])) / \
            float(len(pData[2]) + len(pData[3]))
@@ -608,13 +621,22 @@ def calc_f_measure(precision, recall):
     return 2*precision*recall/(precision + recall)
 
 
+def custom_f1_scorer(y, y_pred, unk):
+    data = process_results_bin([y_pred,y])
+    return calc_f_measure(calc_precision(data),calc_recall(data))
+
+
 def grid_search(X, Y):
     print('doing grid search')
     parameters = {'kernel': ['rbf'], 'C': [.01, .1, 1, 10, 100, 1000],
                   'gamma': [.001,.01,.1,1,10,100,1000]}
-    X = preprocessing.scale(X)
+    if(DEBUG):
+        parameters = {'kernel': ['rbf'], 'C': [1, 10], 'gamma': [1, 10]}
+    scaler = preprocessing.StandardScaler()
+    X = scaler.fit_transform(X)
     svc = svm.SVC()
-    clf = GridSearchCV(svc, parameters, verbose=3, n_jobs=4)
+    scorer = make_scorer(f1_score, labels=['c'], average=None)
+    clf = GridSearchCV(svc, parameters, scoring=custom_f1_scorer, verbose=3, n_jobs=7)
     clf.fit(X,Y)
     return clf.best_score_, clf.best_estimator_.get_params()
 
