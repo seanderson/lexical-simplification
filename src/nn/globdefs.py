@@ -34,3 +34,40 @@ PAR_START_IDX = 3
 STANFORD_POS_BASE="/home/sven/lib/taggers/stanford-postagger-full-2014-08-27/"
 STANFORD_MODEL=STANFORD_POS_BASE + "models/english-bidirectional-distsim.tagger"
 STANFORD_JAR=STANFORD_POS_BASE+ "stanford-postagger.jar"
+
+
+DATA_METAFILE = "/home/nlp/corpora/text_databases/metafile.txt"
+VOCFILE = "/home/nlp/corpora/text_databases/voc.txt"
+VOC_HDR_WORD = "Word"
+VOC_HDR_TOTAL = "Total"
+VOC_HDR_KW = "KW_mult_files"
+VOC_HDR_SUBTLEX = "Subtlex"
+
+# PENN tagset
+#['LS', 'TO', 'VBN', "''", 'WP', 'UH', 'VBG', 'JJ', 'VBZ', '--', 'VBP', 'NN', 'DT', 'PRP', ':', 'WP$', 'NNPS', 'PRP$', 'WDT', '(', ')', '.', ',', '``', '$', 'RB', 'RBR', 'RBS', 'VBD', 'IN', 'FW', 'RP', 'JJR', 'JJS', 'PDT', 'MD', 'VB', 'WRB', 'NNP', 'EX', 'NNS', 'SYM', 'CC', 'CD', 'POS'])
+
+# Major word classes are reduced to single forms (see Paetzold, 2016)
+
+UTAG_MAP = {
+    'VB':'V',
+    'VBD':'V',
+    'VBG':'V',
+    'VBN':'V',
+    'VBP':'V',
+    'VBZ':'V',
+    'NN':'N',
+    'NNS':'N',
+    'NNP':'NP',
+    'NNPS':'NP',
+    'JJ':'J',
+    'JJR':'J',
+    'JJS':'J',
+    'R':'R',
+    'RBR':'R',
+    'RBS':'R'
+}
+
+
+UPENN_TAGSET_FILE = 'help/tagsets/upenn_tagset.pickle'
+POS_DELIM = '_'
+MODEL_FILE = 'w2v.mdl'
