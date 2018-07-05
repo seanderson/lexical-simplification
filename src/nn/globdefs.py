@@ -40,8 +40,6 @@ DATA_METAFILE = "/home/nlp/corpora/text_databases/metafile.txt"
 VOCFILE = "/home/nlp/corpora/text_databases/voc.txt"
 VOC_HDR_WORD = "Word"
 VOC_HDR_TOTAL = "Total"
-VOC_HDR_KW = "KW_mult_files"
-VOC_HDR_SUBTLEX = "Subtlex"
 
 # PENN tagset
 #['LS', 'TO', 'VBN', "''", 'WP', 'UH', 'VBG', 'JJ', 'VBZ', '--', 'VBP', 'NN', 'DT', 'PRP', ':', 'WP$', 'NNPS', 'PRP$', 'WDT', '(', ')', '.', ',', '``', '$', 'RB', 'RBR', 'RBS', 'VBD', 'IN', 'FW', 'RP', 'JJR', 'JJS', 'PDT', 'MD', 'VB', 'WRB', 'NNP', 'EX', 'NNS', 'SYM', 'CC', 'CD', 'POS'])
@@ -49,22 +47,22 @@ VOC_HDR_SUBTLEX = "Subtlex"
 # Major word classes are reduced to single forms (see Paetzold, 2016)
 
 UTAG_MAP = {
-    'VB':'V',
-    'VBD':'V',
-    'VBG':'V',
-    'VBN':'V',
-    'VBP':'V',
-    'VBZ':'V',
-    'NN':'N',
-    'NNS':'N',
-    'NNP':'NP',
-    'NNPS':'NP',
-    'JJ':'J',
-    'JJR':'J',
-    'JJS':'J',
-    'R':'R',
-    'RBR':'R',
-    'RBS':'R'
+    'vb':'v',
+    'vbd':'v',
+    'vbg':'v',
+    'vbn':'v',
+    'vbp':'v',
+    'vbz':'v',
+    'nn':'n',
+    'nns':'n',
+    'nnp':'np',
+    'nnps':'np',
+    'jj':'j',
+    'jjr':'j',
+    'jjs':'j',
+    'r':'r',
+    'rbr':'r',
+    'rbs':'r'
 }
 
 

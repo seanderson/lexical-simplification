@@ -5,14 +5,16 @@ Uses gensim to create embedding vectors in which every word has its POS marked.
 from gensim.models import word2vec
 from gensim.models.callbacks import CallbackAny2Vec
 import logging
+import pathlib
 import datetime
-from nn.globdefs import *
-import nn.prepDataPOS as prepData
+from globdefs import *
+import prepDataPOS as prepData
 
 
+MODEl_EXT = ".model"
 # For details see https://radimrehurek.com/gensim/models/word2vec.html
 SKIPGRAM = 0                # use CBOW
-EMBED_SIZE = 500            # length of embedding vectors
+EMBED_SIZE = 1300            # length of embedding vectors
 WINDOW = 5
 # maximum distance between the current and predicted word
 ALPHA = 0.1                 # The initial learning rate.
@@ -21,15 +23,15 @@ SEED = 13                   # Seed for the random number generator.
 MIN_COUNT = 50
 # Ignores all words with total frequency lower than this.
 MAX_VOCAB_SIZE = None       # Limits the RAM during vocabulary building
-NEGATIVE_SAMPLING = 1       # Use negative sampling
+NEGATIVE_SAMPLING = 5       # Use negative sampling
 SAMPLE = 0                  # The threshold for configuring which
 # higher-frequency words are randomly downsampled
-NTHREADS = 10               # number of threads for training
+NTHREADS = 8               # number of threads for training
 HS = 0
 # If 1, hierarchical softmax will be used for model training.
 HASHFXN = None
 # Hash function to use to randomly initialize weights
-ITER = 3                    # Number of iterations (epochs) over the corpus.
+ITER = 10                    # Number of iterations (epochs) over the corpus.
 TRIM_RULE = None            # Vocabulary trimming rule
 SORTED_VOCAB = 1            # If 1, sort the vocabulary by descending frequency
 # before assigning word indexes.
@@ -50,14 +52,13 @@ class EpochSaver(CallbackAny2Vec):
         self.epoch = 0
 
     def on_epoch_end(self, model):
-        now = datetime.datetime.now()
-        date = '.'.join([str(now.month), str(now.day), str(now.hour),
-                         str(now.minute)])
-        output_path = '{}_version{}_epoch{}.model'.format(self.path_prefix,
-                                                          date, self.epoch)
+        output_path = '{}/epoch{}.model'.format(self.path_prefix, self.epoch)
         print("Save model to {}".format(output_path))
         model.save(output_path)
         self.epoch += 1
+        w = 'big_j'
+        lst = model.wv.most_similar(positive=[w])
+        print(lst)
 
 
 class MySentences(object):
@@ -91,10 +92,14 @@ class MySentences(object):
         return [prepData.fixtoken(w) for w in line.split()]
 
 
-def main():
-    now = datetime.datetime.now()
-    date = '.'.join([str(now.year), str(now.month), str(now.day)])
-    epoch_saver = EpochSaver("/home/nlp/newsela/src/w2v" + date)
+def main(DATABASE=None):
+    # output from training in new directory
+    mtype = 'skip' if SKIPGRAM == 1 else 'cbow'
+    outdir = mtype + '-{:%Y-%b-%d-%H%M}'.format(datetime.datetime.now())
+    pathlib.Path(outdir).mkdir(parents=False, exist_ok=False)
+
+    epoch_saver = EpochSaver(outdir)
+
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s',
                         level=logging.INFO)
     # create empty model
@@ -108,28 +113,47 @@ def main():
                               window=WINDOW,
                               callbacks=[epoch_saver])
     # add vocabulary
-    prepData.build_lexicon(model)
+    if not DATABASE:
+        prepData.build_lexicon(model)
+    else:
+        prepData.build_lexicon(model, corpus=DATABASE)
     flist = []
 
-    with open(DATA_METAFILE) as data_meta:
-        for line in data_meta:
-            with open(line.rstrip('\n')) as database_metafile:
-                for name in database_metafile:
-                    flist.append(name.rstrip('\n'))
-    """
-    with open("/home/nlp/corpora/text_databases/Subtlex/metafile.txt") as \
-            database_metafile:
-                for name in database_metafile:
-                    flist.append(name.rstrip('\n'))
-    """
+    if not DATABASE:
+        with open(DATA_METAFILE) as data_meta:
+            for line in data_meta:
+                with open(line.rstrip('\n')) as database_metafile:
+                    for name in database_metafile:
+                        flist.append(name.rstrip('\n'))
+    else:
+        with open("/home/nlp/corpora/text_databases/"+DATABASE+"/metafile.txt") as \
+                database_metafile:
+                    for name in database_metafile:
+                        flist.append(name.rstrip('\n'))
+        # with open(flist[0]) as file:
+            # sents = file.readlines()
+            # for i in range(len(sents)):
+                # sents[i] = MySentences.tokenize(sents[i]) + ['\n']
     sent_iter = MySentences(flist)
     model.train(sentences=sent_iter,
                 total_examples=sent_iter.countlines(), epochs=ITER)
 
-    # save and reload the model
-    mtype = 'skip' if SKIPGRAM == 1 else 'cbow'
-    model.save("%s-%d.mdl" % (mtype, EMBED_SIZE))
+
+def evaluate(prefix, epochs):
+    """
+    Evaluate a model on different stages (epochs)
+    :param prefix:
+    :param epochs:
+    :return:
+    """
+    for epoch in epochs:
+        print("Loading epoch " + str(epoch))
+        model = word2vec.Word2Vec.load(prefix + str(epoch) + MODEl_EXT)
+        w = 'big_j'
+        lst = model.wv.most_similar(positive=[w])
+        print(w, " : ", lst)
 
 
 if __name__ == "__main__":
-    main()
+    # evaluate("/home/nlp/newsela/src/nn/cbow-2018-Jul-03-1738/epoch", [0, 5, 10])
+    main(DATABASE="Subtlex")
