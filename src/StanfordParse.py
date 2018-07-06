@@ -21,7 +21,6 @@ def tokenize(textfile):
 
 
 def tag(textfile):
-    print(' '.join((['java', '-mx2048m','-cp',path.CLASSPATH, "edu.stanford.nlp.tagger.maxent.MaxentTagger", "-model", '/home/nlp/newsela/stanford-postagger/models/english-bidirectional-distsim.tagger', "-textFile", textfile])))
     result = subprocess.check_output(['java', '-mx2048m','-cp',path.CLASSPATH, "edu.stanford.nlp.tagger.maxent.MaxentTagger", "-model", '/home/nlp/newsela/stanford-postagger/models/english-bidirectional-distsim.tagger', "-textFile", textfile], shell=False)
     with open(textfile + ".tagged", 'w') as file:
         file.writelines(result)
@@ -44,6 +43,7 @@ def tag_all(folder_in, folder_out):
             ['java', '-mx7168m', '-cp', path.CLASSPATH,
              "edu.stanford.nlp.tagger.maxent.MaxentTagger", "-model",
              '/home/nlp/newsela/stanford-postagger/models/english-bidirectional-distsim.tagger',
+             "-sentenceDelimiter", "newline", "-tokenize", "false",
              "-textFile", folder_in + line], shell=False)
         print("Writing " + folder_out + line + ".tagged")
         with open(folder_out + line + ".tagged", 'w') as file:
