@@ -7,8 +7,8 @@ from gensim.models.callbacks import CallbackAny2Vec
 import logging
 import pathlib
 import datetime
-from globdefs import *
-import prepDataPOS as prepData
+from nn.globdefs import *
+import nn.prepDataPOS as prepData
 
 
 MODEl_EXT = ".model"
@@ -56,9 +56,6 @@ class EpochSaver(CallbackAny2Vec):
         print("Save model to {}".format(output_path))
         model.save(output_path)
         self.epoch += 1
-        w = 'big_j'
-        lst = model.wv.most_similar(positive=[w])
-        print(lst)
 
 
 class MySentences(object):
@@ -149,11 +146,23 @@ def evaluate(prefix, epochs):
     for epoch in epochs:
         print("Loading epoch " + str(epoch))
         model = word2vec.Word2Vec.load(prefix + str(epoch) + MODEl_EXT)
+
+        test_file = "/home/nlp/newsela/src/nn/SimLex-999.tsv"
+        print(model.wv.evaluate_word_pairs(test_file))
+
         w = 'big_j'
         lst = model.wv.most_similar(positive=[w])
         print(w, " : ", lst)
 
+        w = 'train_n'
+        lst = model.wv.most_similar(positive=[w])
+        print(w, " : ", lst)
+
+        w = 'train_v'
+        lst = model.wv.most_similar(positive=[w])
+        print(w, " : ", lst)
 
 if __name__ == "__main__":
-    # evaluate("/home/nlp/newsela/src/nn/cbow-2018-Jul-03-1738/epoch", [0, 5, 10])
+    # evaluate("/home/nlp/newsela/src/nn/cbow-2018-Jul-05-1347/epoch", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
     main(DATABASE="Subtlex")
+    use_model("/home/nlp/newsela/src/nn/cbow-2018-Jul-05-1347/epoch4" + MODEl_EXT)
