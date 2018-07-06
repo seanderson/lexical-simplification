@@ -1,12 +1,28 @@
 import sys
 
 from gensim.models import word2vec
+from gensim.models.callbacks import CallbackAny2Vec
 sys.path.append("../")
 import StanfordParse
 import re
 
 PREFIX = "SDGHKASJDGHKJA"
 
+class EpochSaver(CallbackAny2Vec):
+    """
+    Callback to save model after every epoch
+    This class comes with gensim documentation
+    """
+
+    def __init__(self, path_prefix):
+        self.path_prefix = path_prefix
+        self.epoch = 0
+
+    def on_epoch_end(self, model):
+        output_path = '{}/epoch{}.model'.format(self.path_prefix, self.epoch)
+        print("Save model to {}".format(output_path))
+        model.save(output_path)
+        self.epoch += 1
 
 def process(filename, model, output_name, emb_size):
     with open(filename) as file:
@@ -66,7 +82,7 @@ def process(filename, model, output_name, emb_size):
     print("Check_completed")
     model = word2vec.Word2Vec.load(model)
     print("Model_loaded")
-    with open(output_name) as out_file:
+    with open(output_name, 'w') as out_file:
         for word in final_lines:
             if word not in model.wv.vocab:
                 print("WW: word not in vocabulary: " + word)
@@ -78,6 +94,6 @@ def process(filename, model, output_name, emb_size):
 
 if __name__ == "__main__":
     process("/home/nlp/corpora/newsela_complex/Newsela_Complex_Words_Dataset_supplied.txt",
-                    "/home/nlp/newsela/src/nn/cbow-2018-Jul-05-1256/epoch0.model",
+                    "/home/nlp/newsela/src/nn/cbow-2018-Jul-05-1347/epoch4.model",
                      "/home/nlp/corpora/newsela_complex/word_embeddings_Jul-05-1256_epoch0.tsv",
             1300)
