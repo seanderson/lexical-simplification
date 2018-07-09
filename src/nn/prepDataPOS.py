@@ -4,7 +4,7 @@ Prepare several corpora found in nlp:corpora/text_databases for
 input to gensim/word2vec, which is used to create embedding vectors.
 """
 
-from nn.globdefs import *
+from globdefs import *
 import csv
 from gensim.models import Word2Vec
 

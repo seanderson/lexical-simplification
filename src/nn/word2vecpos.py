@@ -7,14 +7,14 @@ from gensim.models.callbacks import CallbackAny2Vec
 import logging
 import pathlib
 import datetime
-from nn.globdefs import *
-import nn.prepDataPOS as prepData
+from globdefs import *
+import prepDataPOS as prepData
 
 
 MODEl_EXT = ".model"
 # For details see https://radimrehurek.com/gensim/models/word2vec.html
 SKIPGRAM = 0                # use CBOW
-EMBED_SIZE = 1300            # length of embedding vectors
+EMBED_SIZE = 500            # length of embedding vectors
 WINDOW = 5
 # maximum distance between the current and predicted word
 ALPHA = 0.1                 # The initial learning rate.
@@ -143,26 +143,23 @@ def evaluate(prefix, epochs):
     :param epochs:
     :return:
     """
-    for epoch in epochs:
-        print("Loading epoch " + str(epoch))
-        model = word2vec.Word2Vec.load(prefix + str(epoch) + MODEl_EXT)
+    with open(prefix + "evaluation.txt", "w") as file:
+        for epoch in epochs:
+            print("Loading epoch " + str(epoch))
+            file.write("\nEpoch " + str(epoch) + ":\n")
+            model = word2vec.Word2Vec.load(prefix + "epoch" + str(epoch) + MODEl_EXT)
 
-        test_file = "/home/nlp/newsela/src/nn/SimLex-999.tsv"
-        print(model.wv.evaluate_word_pairs(test_file))
+            test_file = "/home/nlp/newsela/src/nn/SimLex-999.tsv"
+            print(model.wv.evaluate_word_pairs(test_file))
+            file.write(str(model.wv.evaluate_word_pairs(test_file)) + "\n")
 
-        w = 'big_j'
-        lst = model.wv.most_similar(positive=[w])
-        print(w, " : ", lst)
+            for w in ['big_j', 'train_n', 'train_v']:
+                lst = "\t".join([x[0] for x in model.wv.most_similar(positive=[w])])
+                print(w + ": " + lst)
+                file.write(w + ": " + lst + "\n")
 
-        w = 'train_n'
-        lst = model.wv.most_similar(positive=[w])
-        print(w, " : ", lst)
-
-        w = 'train_v'
-        lst = model.wv.most_similar(positive=[w])
-        print(w, " : ", lst)
 
 if __name__ == "__main__":
-    # evaluate("/home/nlp/newsela/src/nn/cbow-2018-Jul-05-1347/epoch", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-    main(DATABASE="Subtlex")
-    use_model("/home/nlp/newsela/src/nn/cbow-2018-Jul-05-1347/epoch4" + MODEl_EXT)
+    evaluate("/home/nlp/newsela/src/nn/cbow-2018-Jul-07-1131/", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    # main()
+    # use_model("/home/nlp/newsela/src/nn/cbow-2018-Jul-05-1347/epoch4" + MODEl_EXT)
