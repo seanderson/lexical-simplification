@@ -17,7 +17,7 @@ SKIPGRAM = 0                # use CBOW
 EMBED_SIZE = 500            # length of embedding vectors
 WINDOW = 5
 # maximum distance between the current and predicted word
-ALPHA = 0.1                 # The initial learning rate.
+ALPHA = 0.01                 # The initial learning rate.
 MIN_ALPHA = 1.0e-9          # Learning rate will linearly drop to min_alpha
 SEED = 13                   # Seed for the random number generator.
 MIN_COUNT = 50
@@ -31,7 +31,7 @@ HS = 0
 # If 1, hierarchical softmax will be used for model training.
 HASHFXN = None
 # Hash function to use to randomly initialize weights
-ITER = 10                    # Number of iterations (epochs) over the corpus.
+ITER = 5                  # Number of iterations (epochs) over the corpus.
 TRIM_RULE = None            # Vocabulary trimming rule
 SORTED_VOCAB = 1            # If 1, sort the vocabulary by descending frequency
 # before assigning word indexes.
@@ -55,6 +55,7 @@ class EpochSaver(CallbackAny2Vec):
         output_path = '{}/epoch{}.model'.format(self.path_prefix, self.epoch)
         print("Save model to {}".format(output_path))
         model.save(output_path)
+        print(model.running_training_loss)
         self.epoch += 1
 
 
@@ -108,7 +109,10 @@ def main(DATABASE=None):
                               size=EMBED_SIZE,
                               workers=NTHREADS,
                               window=WINDOW,
-                              callbacks=[epoch_saver])
+                              callbacks=[epoch_saver],
+                              compute_loss=True,
+                              alpha=ALPHA,
+                              min_alpha=ALPHA)
     # add vocabulary
     if not DATABASE:
         prepData.build_lexicon(model)
@@ -133,7 +137,7 @@ def main(DATABASE=None):
                 # sents[i] = MySentences.tokenize(sents[i]) + ['\n']
     sent_iter = MySentences(flist)
     model.train(sentences=sent_iter,
-                total_examples=sent_iter.countlines(), epochs=ITER)
+                total_examples=sent_iter.countlines(), epochs=ITER, compute_loss=True)
 
 
 def evaluate(prefix, epochs):
@@ -160,6 +164,6 @@ def evaluate(prefix, epochs):
 
 
 if __name__ == "__main__":
-    evaluate("/home/nlp/newsela/src/nn/cbow-2018-Jul-07-1131/", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-    # main()
+    # evaluate("/home/nlp/newsela/src/nn/cbow-2018-Jul-07-1131/", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    main()
     # use_model("/home/nlp/newsela/src/nn/cbow-2018-Jul-05-1347/epoch4" + MODEl_EXT)
