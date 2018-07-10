@@ -13,10 +13,12 @@ from nltk.corpus import cmudict
 from sklearn import datasets
 from sklearn import svm
 from sklearn import preprocessing
+from sklearn.neural_network import  MLPClassifier
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import f1_score
 from sklearn.metrics import make_scorer
+from sklearn.metrics import confusion_matrix
 import copy
 import random
 
@@ -24,14 +26,35 @@ import random
 CWICTORIFY = False
 TESTCLASSIFY = False
 IMPORTDATA = False
-GRIDSEARCH = True
+NNET = True
+GRIDSEARCH = False
 BINARY_CATEGORIZATION = True
+BINARY_EVALUATION = BINARY_CATEGORIZATION or True
+ALL_COMPLEX = False
+REMOVE_ZEROS = False
 DEBUG = False
+
+WORD_ONLY_CONFIG = [True, True, True, True, True, False, False, False, False, False, False, False]
+CONTEXT_ONLY_CONFIG = [False, False, False, False, False, True, True, True, True, True, True, True]
+ALL_FEATURES_CONFIG = [True, True, True, True, True, True, True, True, True, True, True, True]
+USE_WORD_VECS = True
+CURRENT_CONFIG = ALL_FEATURES_CONFIG
 
 NEWSELLA_SUPPLIED = paths.NEWSELA_COMPLEX + "Newsela_Complex_Words_Dataset_supplied.txt"
 CWICTOIFIED = paths.NEWSELA_COMPLEX + "Cwictorified.txt"
 SAVE_FILE = paths.NEWSELA_COMPLEX + "Feature_data.txt"
 GRAPH_FILE = paths.NEWSELA_COMPLEX + "Graph_output.txt"
+VEC_FILE = paths.NEWSELA_COMPLEX + "word_embeddings_Jul-05-1256_epoch0.tsv"
+
+
+def getStateAsString():
+    s = ''
+    s += 'NNET = ' + str(NNET) + '\n'
+    s += 'BINARY_CATEGORIZATION = ' + str(BINARY_CATEGORIZATION) + '\n'
+    s += 'ALL_COMPLEX = ' + str(ALL_COMPLEX) + '\n'
+    s += 'REMOVE_ZEROS = ' + str(REMOVE_ZEROS) + '\n'
+    s += 'DEBUG = ' + str(DEBUG) + '\n'
+    return s
 
 
 def cwictorify(inputPath, outputPath):
@@ -198,7 +221,7 @@ def calc_nGram_avgs(sent, ngramDict, size):
     return float(totalAvg) / float(len(words))
 
 
-def collect_data(corpusPath, CWPath):
+def collect_data(corpusPath, CWPath, vecPath):
     """
     Collects features from a corpus in CWICTOR format from a file at CWPath
     and a file in Kriz format at corpusPath
@@ -221,6 +244,9 @@ def collect_data(corpusPath, CWPath):
         lines = out.readlines()
     with open(corpusPath) as corp:
         orig = corp.readlines()
+    if USE_WORD_VECS:
+        with open(vecPath) as vec:
+            vecs = vec.readlines()
 
     if(DEBUG):
         lines = lines[:100]
@@ -302,18 +328,18 @@ def collect_data(corpusPath, CWPath):
         # avg word 1-gram freq in sentence
         list[i].append(nGramFreqAvgs[index])
 
+        if USE_WORD_VECS:
+            vecvals = vecs[i].split('\t')[1:]
+            for val in vecvals:
+                list[i].append(val)
+
         list[i].insert(0, line[2])
         list[i].insert(0, sOrig[i][-1].strip('\n'))
         list[i].insert(0, sOrig[i][-2])
-        list[i].append(sOrig[i][0])
+        list[i].append(sOrig[i][0])    # TODO make 10x10 confusion matrix if NNet
         # list.append(line[1])   #causes file to be unreadable?
         if i % 50 == 0:
             print(str(i) + " out of " + str(len(list)))
-
-    '''data = []
-    data.append([line.split('\t')[0].split(' ') for line in lines])
-    count_sentence_syllables(data, m)'''
-
     return list
 
 
@@ -331,17 +357,24 @@ def read_features(filepath, featureConfig=-1):
     for line in lines:
         data.append(line.split('\t')[3:-1])
     data = data[1:]
-    if featureConfig == -1 or len(featureConfig) != len(data[0]):
+    if featureConfig == -1:
         return data
     for featureSetInd in range(len(data)):
         featureSet = data[featureSetInd]
         featureInd = 0
-        while featureInd < len(data[featureSetInd]):
+        #while featureInd < len(data[featureSetInd]):
+        while featureInd < len(featureConfig):
             if not featureConfig[featureInd]:
                 # print(featureInd, len(data[featureSetInd]))
                 featureSet.remove(data[featureSetInd][featureInd])
             featureInd += 1
         data[featureSetInd] = featureSet
+    linesToRemove = []
+    for lineInd in range(len(data)):
+        if len(data[lineInd]) == 0:
+            linesToRemove.append(data[lineInd])
+    for ind in linesToRemove:
+        data.remove(ind)
     return data
 
 
@@ -365,52 +398,10 @@ def classify(data):
     :param data: the data to train the SVM on. In format [X,Y]
     :return: the trained SVM
     """
-    clf = svm.SVC(C=1.0, cache_size=500, gamma=.1, kernel='rbf')
+    clf = svm.SVC(C=1000.0, cache_size=500, gamma=1, kernel='rbf')
     #clf = svm.SVC(kernel='rbf', C=1, verbose=False, probability=False, degree=3, shrinking=True, max_iter = -1, decision_function_shape='ovr', random_state=None, tol=0.001, cache_size=200, coef0=0.0, gamma=0.1, class_weight=None)
     clf.fit(data[0], data[1])
     return clf
-
-
-def test_classify(X, Y):
-    """
-    Tests the SVM
-    :param X: feature data
-    :param Y: label data
-    :return: a decmal frequency of correctly predicted answers
-    """
-    check = []
-    if len(X) != len(Y):
-        return -1
-    if DEBUG:
-        X = X[:200]
-        Y = Y[:200]
-    numTrain = int(.80 * len(X))
-    numTimesToTest = 1
-    for i in range(numTimesToTest):
-        temp = list(zip(copy.copy(X), copy.copy(Y)))
-        random.shuffle(temp)
-        tempX, tempY = zip(*temp)
-        available = [tempX, tempY]
-        train = [[], []]
-        for j in range(numTrain):
-            index = random.randint(0, len(available[0])-1)
-            train[0].append(available[0][index])
-            train[1].append(available[1][index])
-            numpy.delete(available[0], index)
-            numpy.delete(available[1], index)
-        scaler = preprocessing.StandardScaler()
-        train = [scaler.fit_transform(np.asarray(train[0]).astype(np.float)), train[1]]
-        test = [scaler.transform(np.asarray(available[0]).astype(np.float)), available[1]]
-        clf = classify(train)
-        preds = clf.predict(test[0])
-        print("Testing: "+str(i)+" Out of "+str(numTimesToTest))
-        for j in range(len(test[0])):
-            check.append(preds[j] == test[1][j])
-    numRight = 0
-    for i in check:
-        if i:
-            numRight += 1
-    return float(numRight)/float(len(check))
 
 
 def str_to_bin_category(item):
@@ -424,15 +415,6 @@ def str_to_bin_category(item):
         return 's'
     else:
         return 'c'
-
-
-def test_scaling():
-    array = np.array([], [], [])
-    for sub in array:
-        for i in range(4):
-            sub.append(numpy.random.randint(0,40))
-    scaler = preprocessing.StandardScaler()
-    stdScaled = scaler.fit_transform(array)
 
 
 def five_fold_test(X, Y):
@@ -451,14 +433,11 @@ def five_fold_test(X, Y):
         Y = Y[:200]
     numTimesToTest = 5
     # shuffle data
-    preprocessing.scale(X)
     temp = list(zip(copy.copy(X), copy.copy(Y)))
     random.shuffle(temp)
     tempX, tempY = zip(*temp)
     available = [tempX, tempY]
-    if(BINARY_CATEGORIZATION):
-        available[1] = map(str_to_bin_category, available[1])
-    else:
+    if not BINARY_CATEGORIZATION:
         available[1] = map(int, available[1])
     # print(calc_num_in_categories(available[1]))
 
@@ -486,7 +465,11 @@ def five_fold_test(X, Y):
         # SVM
         #clf = LogisticRegression()
         #clf.fit(train[0], train[1])
-        clf = classify(train)
+        if NNET:
+            clf = MLPClassifier()
+            clf.fit(train[0], train[1])
+        else:
+            clf = classify(train)
         preds = clf.predict(test[0])
         # results.append(calc_percent_right(test, preds))
         results[0] = np.append(results[0], preds)
@@ -500,25 +483,40 @@ def process_results(results):
     :param results: [predicted categorizations, actual categorizations]
     :return: confusion matrix split into one list
     '''
-    simpleCorrect = []
-    simpleIncorrect = []
-    complexCorrect = []
-    complexIncorrect = []
-    for i in range(len(results[0])):
-        right = int(results[1][i])
-        pred = int(results[0][i])
-        if right < 3:
-            if pred < 3:
-                simpleCorrect.append([pred, right])
+    if BINARY_EVALUATION:
+        simpleCorrect = []
+        simpleIncorrect = []
+        complexCorrect = []
+        complexIncorrect = []
+        for i in range(len(results[0])):
+            right = int(results[1][i])
+            pred = int(results[0][i])
+            if right < 3:
+                if pred < 3:
+                    simpleCorrect.append([pred, right])
+                else:
+                    simpleIncorrect.append([pred, right])
             else:
-                simpleIncorrect.append([pred, right])
-        else:
-            if pred >= 3:
-                complexCorrect.append([pred, right])
-            else:
-                complexIncorrect.append([pred, right])
-    data = [simpleCorrect, simpleIncorrect, complexCorrect, complexIncorrect]
+                if pred >= 3:
+                    complexCorrect.append([pred, right])
+                else:
+                    complexIncorrect.append([pred, right])
+        data = [simpleCorrect, simpleIncorrect, complexCorrect, complexIncorrect]
+    else:
+        pred = []
+        actual = []
+        for i in range(len(results[0])):
+            actual.append(int(results[1][i]))
+            pred.append(int(results[0][i]))
+        data = confusion_matrix(actual, pred, [0,1,2,3,4,5,6,7,8,9])
     return data
+
+
+'''          correct    incorrect       A v P > complex  simple  
+    complex     TP          FN          complex  CC TP  CI FN
+     simple     TN          FP           simple  SI FP  SC TN
+    [TN, FP, TP, FN]
+'''
 
 
 def process_results_bin(results):
@@ -594,6 +592,23 @@ def calc_percent_right(processedDataCategory):
     return float(numRight) / float(len(check))
 
 
+def calc_TP(pData):
+    TP = 0
+    for i in range(len(pData[0])):
+        TP += pData[i][i]
+    return TP
+
+
+def calc_FP(pData):
+    FP = 0
+    return FP
+
+
+def calc_FN(pData):
+    FN = 0
+    return FN
+
+
 def calc_avg_percent_right(pData):
     avg = 0
     for i in range(len(pData)):
@@ -603,22 +618,35 @@ def calc_avg_percent_right(pData):
 
 
 def calc_percent_categorically_right(pData):
-    return float(len(pData[0])+len(pData[2])) /\
-           float(sum([len(category) for category in pData]))
+    if BINARY_EVALUATION:
+        return float(len(pData[0])+len(pData[2])) /\
+           float(sum([len(pData[0]), len(pData[1]), len(pData[2]), len(pData[3])]))
+    else:
+        return 0
 
 
 def calc_precision(pData):
-    if len(pData[2]) == 0 or len(pData[1]) == 0:
+    if BINARY_EVALUATION:
+        TP = len(pData[2])
+        FP = len(pData[1])
+    else:
+        TP = calc_TP(pData)
+        FP = calc_FP(pData)
+    if TP + FP == 0:
         return 0
-    return float(len(pData[2])) /\
-           float(len(pData[2])+len(pData[1]))
+    return float(TP)/float(TP+FP)
 
 
 def calc_recall(pData):
-    if len(pData[2]) == 0 or len(pData[3]) == 0:
+    if BINARY_EVALUATION:
+        TP = len(pData[2])
+        FN = len(pData[3])
+    else:
+        TP = calc_TP(pData)
+        FN = calc_FN(pData)
+    if TP + FN == 0:
         return 0
-    return float(len(pData[2])) / \
-           float(len(pData[2]) + len(pData[3]))
+    return float(TP)/float(TP+FN)
 
 
 def calc_f_measure(precision, recall):
@@ -628,7 +656,10 @@ def calc_f_measure(precision, recall):
 
 
 def custom_f1_scorer(y, y_pred, **kwargs):
-    data = process_results_bin([y_pred,y])
+    if BINARY_CATEGORIZATION:
+        data = process_results_bin([y_pred,y])
+    else:
+        data = process_results([y_pred,y])
     precision = calc_recall(data)
     recall = calc_recall(data)
     return calc_f_measure(precision, recall)
@@ -636,21 +667,34 @@ def custom_f1_scorer(y, y_pred, **kwargs):
 
 def grid_search(X, Y):
     print('doing grid search')
-    if(BINARY_CATEGORIZATION):
+    '''if(BINARY_CATEGORIZATION):
         for i in range(len(Y)):
-            Y[i] = str_to_bin_category(Y[i])
-    parameters = {'kernel': ['rbf'], 'C': [.01, .1, 1, 10, 100, 1000],
-                  'gamma': [.001,.01,.1,1,10,100,1000]}
-    if(DEBUG):
-        parameters = {'kernel': ['rbf'], 'C': [1, 10], 'gamma': [1, 10]}
+            Y[i] = str_to_bin_category(Y[i])'''
+    if NNET:
+        hiddenLayerSizes = [(100,),(90,),(80,),(70,),(60,),(50,),(40,),(30,),(20,),(10,),(1,)]
+        activations = ['identity', 'logistic', 'tanh', 'relu']
+        solvers = ['lbfgs', 'sgd', 'adam']
+        learningRates = ['constant', 'invscaling', 'adaptive']
+        alphas = 10.0**-numpy.arange(1,7)
+        parameters = {'hidden_layer_sizes': hiddenLayerSizes, 'activation': ['tanh'], 'solver': ['adam'], 'learning_rate': ['adaptive'], 'alpha': alphas}
+        if DEBUG:
+            parameters = {}
+        evaluator = MLPClassifier()
+    else:
+        #parameters = {'kernel': ['rbf'], 'C': [.01, .1, 1, 10, 100, 1000],
+        #              'gamma': [.001,.01,.1,1,10,100,1000]}
+        parameters = {'kernel': ['rbf'], 'C': [800, 900, 1000, 1100, 1200],
+            'gamma': [.01, .5, 1, 5, 10]}
+        if(DEBUG):
+            parameters = {'kernel': ['rbf'], 'C': [1, 10], 'gamma': [1, 10], 'early_stopping': [True]}
+        evaluator = svm.SVC()
     scaler = preprocessing.StandardScaler()
     X = scaler.fit_transform(X)
-    svc = svm.SVC()
-    #scorer = make_scorer(f1_score, labels=['c'], average=None)
     scorer = make_scorer(custom_f1_scorer, labels=['c'], average=None)
-    clf = GridSearchCV(svc, parameters, scoring=scorer, verbose=3, n_jobs=7)
+    clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3, n_jobs=8, cv=10)
     clf.fit(X,Y)
-    return clf.best_score_, clf.best_estimator_.get_params()
+    scores = [x[1] for x in clf.grid_scores_]
+    return clf.best_score_, clf.best_estimator_.get_params(), scores
 
 
 if __name__ == '__main__':
@@ -664,25 +708,45 @@ if __name__ == '__main__':
     if(CWICTORIFY):
         cwictorify(NEWSELLA_SUPPLIED, CWICTOIFIED)
     if(IMPORTDATA):
-        data = (collect_data(NEWSELLA_SUPPLIED, CWICTOIFIED))
+        data = (collect_data(NEWSELLA_SUPPLIED, CWICTOIFIED, VEC_FILE))
         save(data, SAVE_FILE)
         #print (data)
     if not TESTCLASSIFY:
-        config = [True, True, True, True, True, False, False, False, False, False, False, False]
-        # config = [True, True, True, True, True, True, True, True, True, True, True, True]
+        config = CURRENT_CONFIG
         featureData = read_features(SAVE_FILE, config)
         complexScores = read_complexities(NEWSELLA_SUPPLIED)
-        #print(test_classify(featureData, complexScores))
-        #print(temp_kfold_test(featureData, complexScores))
-        if (GRIDSEARCH):
-            print(grid_search(featureData,complexScores))
+        if REMOVE_ZEROS:
+            tempX = []
+            tempY = []
+            for labelInd in range(len(complexScores)):
+                if not (complexScores[labelInd] == 0 or complexScores[labelInd] == '0'):
+                    tempX.append(complexScores[labelInd])
+                    tempY.append(featureData[labelInd])
+            featureData = tempY
+            complexScores = tempX
+        if BINARY_CATEGORIZATION:
+            for labelInd in range(len(complexScores)):
+                complexScores[labelInd] = str_to_bin_category(complexScores[labelInd])
+        if GRIDSEARCH:
+            bestScore, bestEst, scores = grid_search(featureData,complexScores)
+            print(scores)
+            print(str(bestScore))
+            print(bestEst)
         rawDat = five_fold_test(featureData, complexScores)
-        if(BINARY_CATEGORIZATION):
+        if ALL_COMPLEX:
+            if BINARY_EVALUATION:
+                for i in range(len(rawDat[0])):
+                    rawDat[0][i] = 'c'
+            else:
+                for i in range((len(rawDat[0]))):
+                    rawDat[0][i] = 9
+        if BINARY_CATEGORIZATION:
             processedData = process_results_bin(rawDat)
         else:
             processedData = process_results(rawDat)
         precision = calc_precision(processedData)
         recall = calc_recall(processedData)
+        print(getStateAsString())
         print([len(category) for category in processedData])
         print(calc_percent_categorically_right(processedData))
         print(precision, recall, calc_f_measure(precision, recall))
