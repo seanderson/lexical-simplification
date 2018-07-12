@@ -8,7 +8,7 @@ from newselautil import *
 import classpaths as path
 import numpy
 import re
-import utils_for_reno_kriz_data
+# import utils_for_reno_kriz_data
 
 
 class Alignment(object):
@@ -37,8 +37,8 @@ class Alignment(object):
         """
         self.sent0 = sent0
         self.sent1 = sent1
-        # self.sent0 = sent0.split(';')[part0]
-        # self.sent1 = sent1.split(';')[part1]
+        self.sent0 = sent0.split(';')[part0]
+        self.sent1 = sent1.split(';')[part1]
         self.part0 = part0
         self.part1 = part1
         self.ind0 = ind0
@@ -262,10 +262,31 @@ def convert_coordinates(old,pars):
     return old[0], i, old[1]-pars[old[0]][i][1]
 
 
+def output_alignments(file, sentpairs):
+    """
+
+    :param file:
+    :param sentpairs:
+    :return:
+    """
+    for alignment in sentpairs:
+        if alignment.sent0 == alignment.sent1:
+            continue
+        complex = [x for x in alignment.sent0.lower().split(' ') if x not in STOPWORDS]
+        simple = [x for x in alignment.sent1.lower().split(' ') if x not in STOPWORDS]
+        complex_lemmas = [Lemmatizer.lemmatize(x) for x in complex]
+        simple_lemmas = [Lemmatizer.lemmatize(x) for x in simple]
+        complex_only = [x for x in complex if x not in simple and Lemmatizer.lemmatize(x) not in simple_lemmas]
+        simple_only = [x for x in simple if x not in complex and Lemmatizer.lemmatize(x) not in complex_lemmas]
+        if len(complex_only) != 1 and len(simple_only) != 1:
+            continue
+        file.write(complex + '\t' + simple + alignment.sent0.lower().rstrip('\n') + "\n")
+
+
 if __name__ == "__main__":
     """Example use of get_aligned_sentences"""
-    metafile = loadMetafile()
-    sentpairs =  get_aligned_sentences(metafile, "10dollarbill-woman", 0, 1)
+    """metafile = loadMetafile()
+    sentpairs = get_aligned_sentences(metafile, "10dollarbill-woman", 0, 1)
     for alignment in sentpairs:
         if alignment.sent0 != alignment.sent1:
             print("FIRST-SENTENCE:" + str(alignment.ind0) + ':' + str(
@@ -274,4 +295,25 @@ if __name__ == "__main__":
             print("SECOND-SENTENCE:" + str(alignment.ind1) + ':' + str(
                 alignment.p_ind1) + ':' + str(alignment.s_ind1) + ':' + str(
                 alignment.part1) + ' ' + alignment.sent1)
-            print("\n")
+            print("\n")"""
+    with open("/home/nlp/newsela/ALIGNMENTSS.txt", "w") as file:
+        info = loadMetafile()
+        nSlugs = 0
+        nToAlign = 10
+        levels = [(0, 1), (1, 2), (2, 3), (3, 4)]
+        while (i < len(info)) and ((nToAlign == -1) or (nSlugs < nToAlign)):
+            artLow = i  # first article with this slug
+            slug = info[i]['slug']
+            nSlugs += 1
+            if nToAlign == -1:
+                print(
+                    "Processing slug... " + slug + ' ' + str(round(i / float(len(info)) * 100, 3)) + '% of the task completed')
+            while i < len(info) and slug == info[i]['slug']:
+                i += 1
+            artHi = i  # one more than the number of the highest article with this slug
+            for level in levels:
+                if level[1] < artHi - artLow:
+                    sentpairs = get_aligned_sentences(info, slug, level[0], level[1])
+                    output_alignments(file, sentpairs)
+                else:
+                    print("No such level: " + str(level[1]) + " in article: " + slug)

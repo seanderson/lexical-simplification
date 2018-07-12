@@ -1,5 +1,5 @@
 """
-repare data including Part Of Speech
+Prepare data including Part Of Speech
 Prepare several corpora found in nlp:corpora/text_databases for
 input to gensim/word2vec, which is used to create embedding vectors.
 """

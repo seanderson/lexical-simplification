@@ -14,7 +14,7 @@ import prepDataPOS as prepData
 MODEl_EXT = ".model"
 # For details see https://radimrehurek.com/gensim/models/word2vec.html
 SKIPGRAM = 0                # use CBOW
-EMBED_SIZE = 500            # length of embedding vectors
+EMBED_SIZE = 1300            # length of embedding vectors
 WINDOW = 5
 # maximum distance between the current and predicted word
 ALPHA = 0.01                 # The initial learning rate.
@@ -164,6 +164,4 @@ def evaluate(prefix, epochs):
 
 
 if __name__ == "__main__":
-    # evaluate("/home/nlp/newsela/src/nn/cbow-2018-Jul-07-1131/", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
     main()
-    # use_model("/home/nlp/newsela/src/nn/cbow-2018-Jul-05-1347/epoch4" + MODEl_EXT)
