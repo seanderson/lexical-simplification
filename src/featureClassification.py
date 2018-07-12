@@ -10,12 +10,20 @@ from lexenstein.morphadorner import MorphAdornerToolkit
 import classpaths as paths
 from nltk.corpus import wordnet
 from nltk.corpus import cmudict
+from keras.optimizers import adam
+from keras import backend as K
+from keras.models import Sequential
+from keras.layers.core import Activation
+from keras.layers.core import Dense
+from keras.optimizers import SGD
+from tensorflow import cast
 from sklearn import datasets
 from sklearn import svm
 from sklearn import preprocessing
 from sklearn.neural_network import  MLPClassifier
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
 from sklearn.metrics import make_scorer
 from sklearn.metrics import confusion_matrix
@@ -27,6 +35,7 @@ CWICTORIFY = False
 TESTCLASSIFY = False
 IMPORTDATA = False
 NNET = True
+KERAS = True
 GRIDSEARCH = False
 BINARY_CATEGORIZATION = True
 BINARY_EVALUATION = BINARY_CATEGORIZATION or True
@@ -34,9 +43,11 @@ ALL_COMPLEX = False
 REMOVE_ZEROS = False
 DEBUG = False
 
-WORD_ONLY_CONFIG = [True, True, True, True, True, False, False, False, False, False, False, False]
-CONTEXT_ONLY_CONFIG = [False, False, False, False, False, True, True, True, True, True, True, True]
-ALL_FEATURES_CONFIG = [True, True, True, True, True, True, True, True, True, True, True, True]
+WORD_ONLY_CONFIG = [True, True, True, True, True, False, False, False, False, False, False, False, False]
+CONTEXT_ONLY_CONFIG = [False, False, False, False, False, True, True, True, True, True, True, True, True]
+ALL_FEATURES_CONFIG = [True, True, True, True, True, True, True, True, True, True, True, True, True]
+NO_FEATURES = [False, False, False, False, False, False, False, False, False, False, False, False, False]
+DENSITY_ONLY = [False, False, False, False, False, False, True, False, False, False, False, False, False]
 USE_WORD_VECS = True
 CURRENT_CONFIG = ALL_FEATURES_CONFIG
 
@@ -45,6 +56,7 @@ CWICTOIFIED = paths.NEWSELA_COMPLEX + "Cwictorified.txt"
 SAVE_FILE = paths.NEWSELA_COMPLEX + "Feature_data.txt"
 GRAPH_FILE = paths.NEWSELA_COMPLEX + "Graph_output.txt"
 VEC_FILE = paths.NEWSELA_COMPLEX + "word_embeddings_Jul-05-1256_epoch0.tsv"
+DENSITY_FILE = paths.NEWSELA_COMPLEX + "density_Jul-09-1733_epoch0.tsv"
 
 
 def getStateAsString():
@@ -221,7 +233,7 @@ def calc_nGram_avgs(sent, ngramDict, size):
     return float(totalAvg) / float(len(words))
 
 
-def collect_data(corpusPath, CWPath, vecPath):
+def collect_data(corpusPath, CWPath, vecPath, densPath):
     """
     Collects features from a corpus in CWICTOR format from a file at CWPath
     and a file in Kriz format at corpusPath
@@ -244,14 +256,24 @@ def collect_data(corpusPath, CWPath, vecPath):
         lines = out.readlines()
     with open(corpusPath) as corp:
         orig = corp.readlines()
+    with open(densPath) as density:
+        densities = density.readlines()
     if USE_WORD_VECS:
         with open(vecPath) as vec:
             vecs = vec.readlines()
 
-    if(DEBUG):
+    if DEBUG:
         lines = lines[:100]
         orig = orig[:100]
         list = list[:100]
+        densities = densities[:100]
+        if USE_WORD_VECS:
+            vecs = vecs[:100]
+
+    for i in range(len(densities)):
+        densities[i] = densities[i].rstrip('\n')
+    for i in range(len(vecs)):
+        vecs[i] = vecs[i].rstrip('\n')
 
     sOrig = [j.split('\t') for j in orig]
 
@@ -271,6 +293,8 @@ def collect_data(corpusPath, CWPath, vecPath):
     for lineNum in range(len(tmp)):
         tmp[lineNum] = tmp[lineNum].split('\t')
         graphScores.append(tmp[lineNum][0])
+    if DEBUG:
+        graphScores = graphScores[:100]
 
     print("files read")
 
@@ -295,6 +319,9 @@ def collect_data(corpusPath, CWPath, vecPath):
 
         # graph score
         list[i].append(graphScores[i])
+
+        # density score
+        list[i].append(densities[i].split('\t')[-1])
 
         #reset sentence features
         index = int(sOrig[i][-1])
@@ -357,6 +384,8 @@ def read_features(filepath, featureConfig=-1):
     for line in lines:
         data.append(line.split('\t')[3:-1])
     data = data[1:]
+    if DEBUG:
+        data = data[:100]
     if featureConfig == -1:
         return data
     for featureSetInd in range(len(data)):
@@ -389,6 +418,8 @@ def read_complexities(filepath):
         lines = file.readlines()
     for line in lines:
         complexities.append(line.split('\t')[2])
+    if DEBUG:
+        complexities = complexities[:100]
     return complexities
 
 
@@ -436,9 +467,17 @@ def five_fold_test(X, Y):
     temp = list(zip(copy.copy(X), copy.copy(Y)))
     random.shuffle(temp)
     tempX, tempY = zip(*temp)
-    available = [tempX, tempY]
+    available = [tempX, list(tempY)]
     if not BINARY_CATEGORIZATION:
         available[1] = map(int, available[1])
+    if KERAS and NNET and BINARY_CATEGORIZATION:
+        for j in range(len(available[1])):
+            if available[1][j] == 's':
+                available[1][j] = 0
+            elif available[1][j] == 'c':
+                available[1][j] = 1
+            else:
+                print('PROBLEM: Y label '+str(j)+' not s or c')
     # print(calc_num_in_categories(available[1]))
 
     # split into fifths
@@ -466,15 +505,38 @@ def five_fold_test(X, Y):
         #clf = LogisticRegression()
         #clf.fit(train[0], train[1])
         if NNET:
-            clf = MLPClassifier()
-            clf.fit(train[0], train[1])
+            if not KERAS:
+                clf = MLPClassifier(hidden_layer_sizes=(10,), activation='tanh', alpha=0, solver='adam',learning_rate='adaptive')
+                clf.fit(train[0], train[1])
+                preds = clf.predict(test[0])
+            else:
+                clf = keras_NN(train[0], train[1])
+                preds = []
+                preds = clf.predict_on_batch(test[0])   # TEST
+                '''for j in range(len(test[0])):
+                    probs = clf.predict(np.asarray(test[0][j]))
+                    prediction = probs.argmax(axis=0)
+                    preds.append(prediction)'''
         else:
             clf = classify(train)
-        preds = clf.predict(test[0])
+            preds = clf.predict(test[0])
         # results.append(calc_percent_right(test, preds))
         results[0] = np.append(results[0], preds)
         results[1] = np.append(results[1], test[1])
+    if KERAS and BINARY_CATEGORIZATION and NNET:
+        results[0] = map(bi_nums_to_str, results[0])
+        results[1] = map(bi_nums_to_str, results[1])
     return results
+
+
+def bi_nums_to_str(num):
+    if num == 1:
+        return 'c'
+    elif num == 0:
+        return 's'
+    else:
+        print('PROBLEM: num not 1 or 0')
+        return '?'
 
 
 def process_results(results):
@@ -558,6 +620,19 @@ def temp_kfold_test(X,Y):
     X = preprocessing.scale(X)
     scores = cross_val_score(clf, X, Y, cv=5)
     return scores
+
+
+def keras_NN(X, Y):
+    callbacks = []
+    X = np.array(X)
+    model = Sequential()
+    model.add(Dense(10, input_dim=len(X[0]), init="uniform", activation="tanh"))
+    model.add(Dense(1))
+    model.add(Activation("softmax"))
+    print('Making network')
+    model.compile(loss="binary_crossentropy", optimizer='adam', metrics=['acc']) # TODO changes metric to custom_f1_scorer
+    model.fit(X, Y, epochs=50, batch_size=128, verbose=1)
+    return model
 
 
 def calc_num_in_categories(l):
@@ -657,6 +732,13 @@ def calc_f_measure(precision, recall):
 
 def custom_f1_scorer(y, y_pred, **kwargs):
     if BINARY_CATEGORIZATION:
+        if KERAS:
+            y = K.get_value(y)
+            y_pred = K.get_value(y_pred)
+            #y = cast(y,"int32")
+            #y_pred = cast(y_pred,'int32')
+            map(bi_nums_to_str, y)
+            map(bi_nums_to_str, y_pred)
         data = process_results_bin([y_pred,y])
     else:
         data = process_results([y_pred,y])
@@ -671,14 +753,15 @@ def grid_search(X, Y):
         for i in range(len(Y)):
             Y[i] = str_to_bin_category(Y[i])'''
     if NNET:
-        hiddenLayerSizes = [(100,),(90,),(80,),(70,),(60,),(50,),(40,),(30,),(20,),(10,),(1,)]
+        # hiddenLayerSizes = [(60,),(40,),(20,),(15,),(10,),(5,),(1,)]
+        hiddenLayerSizes = [(300,150),(100,50,),(80,40,),(60,30,),(40,20,),(20,10,),(15,7,),(10,15,),(5,2,)]
         activations = ['identity', 'logistic', 'tanh', 'relu']
         solvers = ['lbfgs', 'sgd', 'adam']
         learningRates = ['constant', 'invscaling', 'adaptive']
-        alphas = 10.0**-numpy.arange(1,7)
-        parameters = {'hidden_layer_sizes': hiddenLayerSizes, 'activation': ['tanh'], 'solver': ['adam'], 'learning_rate': ['adaptive'], 'alpha': alphas}
+        alphas = [.1, .001, .00001, .0000001]
+        parameters = {'hidden_layer_sizes': hiddenLayerSizes, 'activation': ['tanh'], 'solver': ['adam'], 'learning_rate': ['adaptive'], 'alpha': [0], 'early_stopping':[True]}
         if DEBUG:
-            parameters = {}
+            parameters = {'hidden_layer_sizes': [(20,), (10,)]}
         evaluator = MLPClassifier()
     else:
         #parameters = {'kernel': ['rbf'], 'C': [.01, .1, 1, 10, 100, 1000],
@@ -691,26 +774,32 @@ def grid_search(X, Y):
     scaler = preprocessing.StandardScaler()
     X = scaler.fit_transform(X)
     scorer = make_scorer(custom_f1_scorer, labels=['c'], average=None)
-    clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3, n_jobs=8, cv=10)
+    clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3, n_jobs=8, cv=7)
     clf.fit(X,Y)
-    scores = [x[1] for x in clf.grid_scores_]
+    scores = clf.cv_results_
     return clf.best_score_, clf.best_estimator_.get_params(), scores
 
 
+def analyzeScores(scores):
+    scoresMean = scores['mean_test_score']
+    scoresMean = np.array(scoresMean)
+    return scoresMean
+
+
 if __name__ == '__main__':
-    if(TESTCLASSIFY):
+    if TESTCLASSIFY:
         iris = datasets.load_iris()
         rawDat = five_fold_test(iris.data, iris.target)
         processedData = []
         for i in range(len(rawDat[0])):
             processedData.append([rawDat[0][i],rawDat[1][i]])
         print(calc_percent_right(processedData))
-    if(CWICTORIFY):
+    if CWICTORIFY:
         cwictorify(NEWSELLA_SUPPLIED, CWICTOIFIED)
-    if(IMPORTDATA):
-        data = (collect_data(NEWSELLA_SUPPLIED, CWICTOIFIED, VEC_FILE))
+    if IMPORTDATA:
+        data = (collect_data(NEWSELLA_SUPPLIED, CWICTOIFIED, VEC_FILE, DENSITY_FILE))
         save(data, SAVE_FILE)
-        #print (data)
+        # print(data)
     if not TESTCLASSIFY:
         config = CURRENT_CONFIG
         featureData = read_features(SAVE_FILE, config)
@@ -729,13 +818,14 @@ if __name__ == '__main__':
                 complexScores[labelInd] = str_to_bin_category(complexScores[labelInd])
         if GRIDSEARCH:
             bestScore, bestEst, scores = grid_search(featureData,complexScores)
-            print(scores)
+            print(analyzeScores(scores))
             print(str(bestScore))
             print(bestEst)
         rawDat = five_fold_test(featureData, complexScores)
         if ALL_COMPLEX:
             if BINARY_EVALUATION:
                 for i in range(len(rawDat[0])):
+                    print(i)
                     rawDat[0][i] = 'c'
             else:
                 for i in range((len(rawDat[0]))):
