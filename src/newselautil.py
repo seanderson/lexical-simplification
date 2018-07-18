@@ -13,6 +13,7 @@ from nltk.tokenize import TreebankWordTokenizer
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import wordnet
 
+
 from nltk.corpus import stopwords
 
 STOPWORDS = stopwords.words('english')
@@ -26,6 +27,22 @@ Tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
 Wordtokenizer = TreebankWordTokenizer()
 Lemmatizer = WordNetLemmatizer()
 htmltag_rm = re.compile(r'(<!--.*?-->|<[^>]*>)')
+
+
+def smart_lemmatize(word, treebank_tag):
+    # print(word, treebank_tag)
+    if word == "":
+        return word
+    if treebank_tag.startswith('J'):
+        return Lemmatizer.lemmatize(word, wordnet.ADJ)
+    elif treebank_tag.startswith('V'):
+        return Lemmatizer.lemmatize(word, wordnet.VERB)
+    elif treebank_tag.startswith('N'):
+        return Lemmatizer.lemmatize(word, wordnet.NOUN)
+    elif treebank_tag.startswith('R'):
+        return Lemmatizer.lemmatize(word, wordnet.ADV)
+    else:
+        return word
 
 
 def loadMetafile():

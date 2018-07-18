@@ -12,14 +12,12 @@ import StanfordParse
 import re
 
 
-CHRIS_DATA = "/home/nlp/corpora/newsela_complex/" \
-             "Newsela_Complex_Words_Dataset_supplied.txt"
+CHRIS_DATA = "/home/nlp/corpora/newsela_aligned/dataset.txt"
 MODEL_FILE = "/home/nlp/newsela/src/nn/cbow-2018-Jul-05-1256/epoch0.model"
-OUTPUT_FILE = "/home/nlp/corpora/newsela_complex/" \
-              "density_Jul-05-1256_epoch0.tsv"
+OUTPUT_FILE = "/home/nlp/corpora/newsela_aligned/density_Jul-05-1256_epoch0.tsv"
 EMBED_SIZE = 1300
 PREFIX = "SDGHKASJDGHKJA"  # A string that should not appear in the test itself
-DENSITY_LEVELS = [1, 5, 10, 50, 100, 200]
+DENSITY_LEVELS = [1, 5, 10, 50, 100]
 COSINE_LEVELS = [0.4, 0.3, 0.25]
 # The topN numbers to consider when calculating the density measure
 
@@ -32,26 +30,42 @@ def tag_chris_data(filename):
     """
     with open(filename) as file:
         lines = file.readlines()
+    """
     with open(filename + ".sents", "w") as file:
         for line in lines:
             file.write(PREFIX + " " + line.split('\t')[3].rstrip('\n') + '\n')
     StanfordParse.tag(filename + ".sents")
+    """
     with open(filename + ".sents.tagged") as file:
         lines_tagged = file.readlines()
 
     # Restoring the original line order in the .tagged file
     j = 0
+    # print(len(lines_tagged))
+    minus = 0
+    plus = 0
     while j < len(lines_tagged):
+        if j % 1000 == 0:
+            print(j)
         if lines_tagged[j][:len(PREFIX)] == PREFIX:
             lines_tagged[j] = ' '.join(lines_tagged[j].split(' ')[1:])
+            if PREFIX in [x.split('_')[0] for x in lines_tagged[j].split(' ')]:
+                line = lines_tagged[j].split(' ')
+                ind = [x.split('_')[0] for x in lines_tagged[j].split(' ')].index(PREFIX)
+                lines_tagged[j] = ' '.join(line[:ind]).rstrip('\n') + '\n'
+                newline = ' '.join(line[ind:])
+                lines_tagged.insert(j+1, newline)
+                plus += 1
             j += 1
         else:
-            lines_tagged[j - 1] = lines_tagged[j - 1].rstrip(' \n') + ' ' + \
+            lines_tagged[j - 1] = PREFIX + " " + lines_tagged[j - 1].rstrip(' \n') + ' ' + \
                                   lines_tagged[j]
             del lines_tagged[j]
+            j -= 1
+            minus -= 1
 
     if len(lines) != len(lines_tagged):
-        print("File lengths are unequal!")
+        print("File lengths are unequal! " + str([len(lines), len(lines_tagged), plus, minus]))
         exit(-1)
 
     with open(filename + ".sents.tagged", 'w') as file:
@@ -80,15 +94,21 @@ def get_tagged_data(lines, lines_tagged):
                              line_tagged)
         line_tagged = re.sub('a\.m\._nn \._\.', 'a.m._nn',
                              line_tagged)
+        line_tagged = re.sub('d-ill_nnp \._\.', 'd_ill._nnp',
+                             line_tagged)
         line_tagged = re.sub('u\.s_nnp \._\.', 'u.s._nnp', line_tagged).split(
             ' ')
         if '\xa0' in line:
             line_tagged.insert(line.index('\xa0'), '\xa0')
         if len(line) != len(line_tagged):
-            print(line)
-            print(line_tagged)
-            print("Line lengths are unequal! ln:" + str(i))
-            exit(-1)
+            old = line_tagged
+            line_tagged = re.sub(r' `_`` (s|re|ll|d|ve|m|60s|t|80s|40s)_', r' `\1_', ' '.join(line_tagged)).split(
+                ' ')
+            if len(line) != len(line_tagged):
+                print(line)
+                print(old)
+                print("Line lengths are unequal! ln:" + str(i))
+                exit(-1)
         if word != line[ind]:
             if word == line[ind - 2]:
                 ind -= 2
@@ -150,8 +170,10 @@ def process_chris_data(filename, model, output_name, emb_size, EMBEDDINGS=True,
     model = word2vec.Word2Vec.load(model)
     print("Model_loaded")
 
+    seenbefore = {}
+
     with open(output_name, 'w') as out_file:
-        for word in final_lines[:10]:
+        for word in final_lines:
             if word not in model.wv.vocab:
                 print("WW: word not in vocabulary: " + word)
                 vector = "0\t" * (emb_size - 1) + "0"
@@ -159,8 +181,9 @@ def process_chris_data(filename, model, output_name, emb_size, EMBEDDINGS=True,
                     density = "0\t" * (len(COSINE_LEVELS) - 1) + "0"
                 else:
                     density = "0\t" * (len(DENSITY_LEVELS) - 1) + "0"
-            else:
+            elif word not in seenbefore:
                 vector = '\t'.join([str(x) for x in model.wv.get_vector(word)])
+                seenbefore[word] = [vector, ""]
                 similar = model.wv.most_similar(positive=[word], topn=DENSITY_LEVELS[-1])
                 similar = [x[1] for x in similar]
                 if not is_sorted(similar):
@@ -180,8 +203,11 @@ def process_chris_data(filename, model, output_name, emb_size, EMBEDDINGS=True,
                             density[-1] = sum(x >= COSINE_LEVELS[i] for x in similar)
 
                 else:
-                    density = [str(float(sum(similar[:d]))/d) for d in DENSITY_LEVELS]
-                    density = '\t'.join(density)
+                    density = [float(sum(similar[:d]))/d for d in DENSITY_LEVELS]
+                density = '\t'.join([str(x) for x in density])
+                seenbefore[word][1] = density
+            else:
+                vector, density = seenbefore[word]
             out_line = word
             if EMBEDDINGS:
                 out_line += '\t' + vector
@@ -193,4 +219,4 @@ def process_chris_data(filename, model, output_name, emb_size, EMBEDDINGS=True,
 if __name__ == "__main__":
     # tag_chris_data(CHRIS_DATA)
     process_chris_data(CHRIS_DATA, MODEL_FILE, OUTPUT_FILE, EMBED_SIZE,
-                       EMBEDDINGS=False, DENSITY=True)
+                      EMBEDDINGS=False, DENSITY=True)
