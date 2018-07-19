@@ -14,6 +14,8 @@ UTAG_MAP = {  # map used when building a language model
 }
 # TODO: Check whether R should be used instead of RB
 ANY_POS = ""  # for storing information about any POS
+n_unique_words = 0
+n_unique_entries = 0
 
 
 def build_ultimate_lexicon(ul, lexicon, n_of_lexicons, l_id, l_name):
@@ -26,17 +28,21 @@ def build_ultimate_lexicon(ul, lexicon, n_of_lexicons, l_id, l_name):
     :param l_name:        the name of te hlexicon
     :return: None
     """
+    global n_unique_words
+    global n_unique_entries
     for i in range(len(lexicon)):
-        word, tag = [x.casefold() for x in lexicon[i].rstrip('\n').split('_')]
+        word, tag = [x.casefold() for x in lexicon[i].rstrip('\n').split('\t')]
         if tag not in UTAG_MAP:
             print("Lexicon: " + l_name + ", line: " + str(i))
             print("Word " + word + " is marked with an unknown POS tag: " + tag)
             exit(-1)
         if word not in ul:
+            n_unique_words += 1
             ul[word] = {}
             ul[word][ANY_POS] = numpy.zeros(n_of_lexicons)
         tag = UTAG_MAP[tag]
         if tag not in ul[word]:
+            n_unique_entries += 1
             ul[word][tag] = numpy.zeros(n_of_lexicons)
         ul[word][tag][l_id] = 1
         ul[word][ANY_POS][l_id] = 1
@@ -119,4 +125,9 @@ if __name__ == "__main__":
         lex_names.append(l_name)
         with open(filename) as file:
             build_ultimate_lexicon(ul, file.readlines(), len(files), i, l_name)
+    print("Total number of entries (excluding words without tags): "
+          + str(n_unique_entries))
+    print("Total number of unique words: " + str(n_unique_words))
+    print("Average number of POS tags per word: " + str(
+        round(float(n_unique_entries) / n_unique_words, 2)))
     write_ultimate_lexicon(ul, sys.argv[2], lex_names)
