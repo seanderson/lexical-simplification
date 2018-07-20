@@ -1,69 +1,63 @@
 import numpy
-from lexenstein.identifiers import *
 from lexenstein.features import *
 from lexenstein.morphadorner import MorphAdornerToolkit
 import classpaths as paths
 from nltk.corpus import wordnet
 from nltk.corpus import cmudict
-from keras.optimizers import adam
-from keras import backend as K
-from keras import optimizers
-from keras.callbacks import EarlyStopping
-from keras.models import Sequential
-from keras.layers.core import Activation
-from keras.layers.core import Dense
-from keras.optimizers import SGD
-from keras.wrappers.scikit_learn import KerasClassifier
-from tensorflow import cast
-from sklearn import datasets
-from sklearn import svm
-from sklearn import preprocessing
-from sklearn.linear_model import LinearRegression
-from sklearn.neural_network import  MLPClassifier
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import GridSearchCV
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import f1_score
-from sklearn.metrics import make_scorer
-from sklearn.metrics import confusion_matrix
-import copy
-import random
 
 
-KRIZ_SUPPLIED = paths.NEWSELA_COMPLEX + "Newsela_Complex_Words_Dataset_supplied.txt"
-ALIGNED_SUPPLIED = paths.NEWSELA_ALIGNED + "dataset.txt"
-KRIZ_CW = paths.NEWSELA_COMPLEX + "Cwictorified.txt"
-ALIGNED_CW = paths.NEWSELA_ALIGNED + "Cwictorified.txt"
-KRIZ_SAVE = paths.NEWSELA_COMPLEX + "Feature_data.txt"
-ALIGNED_SAVE = paths.NEWSELA_ALIGNED + "Feature_data.txt"
-KRIZ_GRAPH = paths.NEWSELA_COMPLEX + "Graph_output.txt"
-ALIGNED_GRAPH = None
-KRIZ_VECS = paths.NEWSELA_COMPLEX + "word_embeddings_Jul-05-1256_epoch0.tsv"
-ALIGNED_VECS = paths.NEWSELA_ALIGNED + "embeddings_Jul-05-1256_epoch0.tsv"
-KRIZ_DENSITIES = paths.NEWSELA_COMPLEX + "density_Jul-09-1733_epoch0.tsv"
-ALIGNED_DENSITIES = paths.NEWSELA_ALIGNED + "density_Jul-05-1256_epoch0.tsv"
+ORIGINAL_DATA = paths.NEWSELA_ALIGNED + "dataset.txt"
+EMBEDDINGS = paths.NEWSELA_ALIGNED + "embeddings_Jul-05-1256_epoch0.tsv"
+DENSITIES = paths.NEWSELA_ALIGNED + "density_Jul-05-1256_epoch0.tsv"
+FEATURE_DIR = paths.NEWSELA_ALIGNED + "features"
+BINARY = lambda x: int(x)
 
-features = []
+"""
+ORIGINAL_DATA = \
+    paths.NEWSELA_COMPLEX + "Newsela_Complex_Words_Dataset_supplied.txt"
+EMBEDDINGS = paths.NEWSELA_COMPLEX + "word_embeddings_Jul-05-1256_epoch0.tsv"
+DENSITIES = paths.NEWSELA_COMPLEX + "density_Jul-09-1733_epoch0.tsv"
+FEATURE_DIR = paths.NEWSELA_COMPLEX + "features"
+BINARY = lambda x: 0 if int(x) <= 3  else 1 
+"""
 
-def cwictorify(inputPath, outputPath):
+
+FEATURES = {"syllab_sent": count_sent_syllables()}
+
+
+def cwictorify():
     """
-    Writes the file from inputPath in CWICTOR format
-    :param inputPath:
-    :param outputPath:
+    Converts the original data from the Chris format to CWICTOR format used
+    by lexenstein.
+    CWICTOR format: sent    word    ind    score (binary)
+    :return: the list of lines in CWICTOR format
     """
-    # format: Sentence   word    indexInSent     BinaryIsComplex
-    with open(inputPath) as file:
-        input = file.readlines()
-    with open(outputPath,"w") as output:
-        for line in input:
-            list = line.split('\t')
-            #print(list)
-            if int(list[2]) > 3:
-                c = 1
-            else:
-                c = 0
-            output.write(list[3]+"\t"+list[0]+"\t"+list[1]+"\t"+str(c)+"\n")
-    return outputPath
+    lines = get_raw_data()
+    return ['\t'.join([x['sent'], x['word'], x['ind'], str(BINARY(x['score']))])
+            + '\n' for x in lines]
+
+
+def get_raw_data():
+    """
+    Load the raw data (in Chris format) in memory
+    :return: list of [word, word_index, complexity, sentence]
+    """
+    with open(ORIGINAL_DATA) as file:
+        lines = file.readlines()
+    lines = [line.rstrip('\n').split('\t') for line in lines]
+    lines = [{'word': x[0], 'sent': x[3], 'ind': x[1], 'score':x[2]}
+             for x in lines]
+    return lines
+
+
+def count_sent_syllables():
+    lines = [x['sent'] for x in get_raw_data()]
+    output = numpy.zeros(len(lines))
+    for i in range(len(lines)):
+        for word in lines[i].split(' '):
+            output[i] += syllab_count(word)
+    numpy.save(FEATURE_DIR)
+
 
 
 def count_sentence_syllables(sent, d = cmudict.dict(), m = MorphAdornerToolkit(paths.MORPH_ADORNER_TOOLKIT)):
@@ -203,8 +197,7 @@ def collect_data(corpusPath, CWPath, vecPath, densPath):
     fe = FeatureEstimator()
     fe.addLengthFeature('Complexity')  # word length
     fe.addSynonymCountFeature('Simplicity')  # WordNet synonyms
-    list = fe.calculateFeatures(cwictorify(corpusPath, CWPath),
-                                format='cwictor')
+    list = fe.calculateFeatures(cwictorify(), format='cwictor', input='text')
 
     sentenceSylbs = []
     currentArticle = ""

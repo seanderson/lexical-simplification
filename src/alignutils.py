@@ -325,7 +325,7 @@ def sultan_aligner(sent0, sent1, tags0, tags1, expectation):
         print(str(alignments) + '\n')
 
 
-def output_alignments(file, sentpairs, slug):
+def output_alignments(file, sentpairs, slug, all_alignments, debug=False):
     """
 
     :param file:
@@ -333,6 +333,7 @@ def output_alignments(file, sentpairs, slug):
     :return:
     """
     ARTICLES = ['a', 'an', 'the']
+    als = []
     for alignment in sentpairs:
         if alignment.sent0 == alignment.sent1:
             continue
@@ -355,6 +356,9 @@ def output_alignments(file, sentpairs, slug):
                 continue
                 # sultan_aligner(alignment.sent0.split(' '), alignment.sent1.split(' '), complex_tags, simple_tags, len(simple_only))
             continue
+        if complex_only[0][1] != simple_only[0][1]:
+            # print(complex_only, simple_only, alignment.sent0)
+            continue
         if complex_only[0][0] in STOPWORDS or simple_only[0][0] in STOPWORDS:
             continue
         if simple_only[0][2][0] != complex_only[0][2][0]:
@@ -364,31 +368,98 @@ def output_alignments(file, sentpairs, slug):
             continue
         # if not re.match('[ -~]*[a-z][ -~]*', complex_only[0][0]) or not re.match('[ -~]*[a-z][ -~]*', simple_only[0][0]):
             # continue
-        file.write(slug + "\t" + str(alignment.ind0) + "\t" + str(alignment.ind1) + "\n")
+        key = re.sub('[^a-z]', '', alignment.sent0.rstrip('\n').casefold())
+        if key in all_alignments:
+            already_found = False
+            for x in all_alignments[key]:
+                if x[0] == alignment.sent0.split(' ')[complex_only[0][1]] and x[1] == alignment.sent1.split(' ')[simple_only[0][1]]:
+                    already_found = True
+                    break
+            if not already_found:
+                # print("Difference: " + " ".join([all_alignments[key][0][0], alignment.sent0.split(' ')[complex_only[0][1]], all_alignments[key][0][1], alignment.sent1.split(' ')[simple_only[0][1]]]))
+                all_alignments[key].append([alignment.sent0.split(' ')[complex_only[0][1]], alignment.sent1.split(' ')[simple_only[0][1]]])
+            else:
+                continue
+            continue
+        else:
+            all_alignments[key] = [[alignment.sent0.split(' ')[complex_only[0][1]], alignment.sent1.split(' ')[simple_only[0][1]]]]
+
+        key = re.sub('[^a-z]', '', alignment.sent1.rstrip('\n').casefold())
+        if key in all_alignments:
+            already_found = False
+            for x in all_alignments[key]:
+                if x[0] == alignment.sent0.split(' ')[complex_only[0][1]] and x[
+                    1] == alignment.sent1.split(' ')[simple_only[0][1]]:
+                    already_found = True
+                    break
+            if not already_found:
+                # print("Difference: " + " ".join([all_alignments[key][0][0], alignment.sent0.split(' ')[complex_only[0][1]], all_alignments[key][0][1], alignment.sent1.split(' ')[simple_only[0][1]]]))
+                all_alignments[key].append(
+                    [alignment.sent0.split(' ')[complex_only[0][1]],
+                     alignment.sent1.split(' ')[simple_only[0][1]]])
+            else:
+                continue
+            continue
+        else:
+            all_alignments[key] = [
+                [alignment.sent0.split(' ')[complex_only[0][1]],
+                 alignment.sent1.split(' ')[simple_only[0][1]]]]
+
+        if debug:
+            print(slug + "\t" + str(alignment.ind0) + "\t" + str(
+                alignment.ind1))
+            print(alignment.sent0.split(' ')[complex_only[0][1]] + '\t' + str(complex_only[0][1]) + '\t' + alignment.sent0.rstrip('\n'))
+            print(alignment.sent1.split(' ')[simple_only[0][1]] + '\t' + str(simple_only[0][1]) + '\t' + alignment.sent1.rstrip('\n') + "\n")
+            pass
+        file.write(slug + "\t" + str(alignment.ind0) + "\t" + str(
+                alignment.ind1) + "\n")
         file.write(alignment.sent0.split(' ')[complex_only[0][1]] + '\t' + str(complex_only[0][1]) + '\t' + alignment.sent0.rstrip('\n') + "\n")
         file.write(alignment.sent1.split(' ')[simple_only[0][1]] + '\t' + str(simple_only[0][1]) + '\t' + alignment.sent1.rstrip('\n') + "\n\n")
+        als.append((alignment.ind0, alignment.ind1))
         """file.write(alignment.sent0.split(' ')[complex_only[0][1]] + '\t' + str(
             complex_only[0][1]) + '\t1\t' + alignment.sent0.rstrip('\n') + "\t" + slug + "\t" + str(alignment.ind0) + "\n")
         complex = [x for x in complex if x[1] != complex_only[0][1]]
         complex = [x for x in complex if x[0].lower() not in STOPWORDS and re.match('.*[a-zA-Z].*', x[0]) and x[2] != "NNP"]
         for other in complex:
             file.write(alignment.sent0.split(' ')[other[1]] + '\t' + str(other[1]) + '\t0\t' + alignment.sent0.rstrip('\n') + "\t" + slug + "\t" + str(alignment.ind0) + "\n")"""
+    count = count_max_yield(als)
+    if len(als) != count:
+        print("Out of " + str(len(als)) + " alignments only " + str(count) + " would have been possible")
+    return count, len(als)
+
+
+def count_max_yield(als):
+    max = 0
+    if len(als) < 2:
+        return len(als)
+    for i in range(len(als)):
+        passing = []
+        for j in range(i + 1, len(als)):
+            if (als[i][0] < als[j][0]) == (als[i][1] < als[j][1]):
+                passing.append(als[j])
+        curr = count_max_yield(passing)
+        if curr > max:
+            max = curr
+    return 1 + max
 
 
 if __name__ == "__main__":
+    count = 0
+    als = 0
+    all_alignments = {}
     with open("/home/nlp/newsela/ALIGNMENTS.txt", "w") as file:
         i = 0
         info = loadMetafile()
         nSlugs = 0
         nToAlign = -1
-        levels = [(0, 1), (1, 2), (2, 3), (3, 4)]
+        levels = [(0, 1), (1, 2), (2, 3), (3, 4), (0, 3), (0, 4), (1, 3), (1, 4), (2, 4)]
         while (i < len(info)) and ((nToAlign == -1) or (nSlugs < nToAlign)):
             artLow = i  # first article with this slug
             slug = info[i]['slug']
             nSlugs += 1
-            if nToAlign == -1:
-                print(
-                    "Processing slug... " + slug + ' ' + str(round(i / float(len(info)) * 100, 3)) + '% of the task completed')
+            # if nToAlign == -1:
+                # print(
+                    # "Processing slug... " + slug + ' ' + str(round(i / float(len(info)) * 100, 3)) + '% of the task completed')
             while i < len(info) and slug == info[i]['slug']:
                 i += 1
             artHi = i  # one more than the number of the highest article with this slug
@@ -396,6 +467,9 @@ if __name__ == "__main__":
                 if level[1] < artHi - artLow:
                     sentpairs = get_aligned_sentences(info, slug, level[0], level[1])
                     # output_alignments(file, sentpairs, slug + "\t" + "\t".join([str(x) for x in level]))
-                    output_alignments(file, sentpairs, slug)
+                    c, a = output_alignments(file, sentpairs, slug + "\t" + "\t".join([str(x) for x in level]), all_alignments, abs(level[0] - level[1]) != 1)
+                    count += c
+                    als += a
                 else:
                     print("No such level: " + str(level[1]) + " in article: " + slug)
+    print("Out of " + str(als) + " alignments only " + str(count) + " would have been possible")

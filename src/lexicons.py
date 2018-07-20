@@ -10,7 +10,8 @@ UTAG_MAP = {  # map used when building a language model
     'cc': 'cc', 'cd': 'cd', 'dt': 'dt', 'ex': 'ex', 'fw': 'fw', 'in': 'in',
     'ls': 'ls', 'md': 'md', 'pdt': 'pdt', 'pos': 'pos', 'prp': 'prp',
     'prp$': 'prp$', 'rp': 'rp', 'sym': 'sym', 'to': 'to', 'uh': 'uh',
-    'wdt': 'wdt', 'wp': 'wp', 'wp$': 'wp$', 'wrb': 'wrb', '.': '.'
+    'wdt': 'wdt', 'wp': 'wp', 'wp$': 'wp$', 'wrb': 'wrb', '.': '.', '``': '``',
+    '\'\'': '\'\''
 }
 # TODO: Check whether R should be used instead of RB
 ANY_POS = ""  # for storing information about any POS
@@ -31,6 +32,10 @@ def build_ultimate_lexicon(ul, lexicon, n_of_lexicons, l_id, l_name):
     global n_unique_words
     global n_unique_entries
     for i in range(len(lexicon)):
+        if len(lexicon[i].rstrip('\n').split('\t')) != 2:
+            print("Lexicon: " + l_name + ", line: " + str(i))
+            print("Too many values to unpack: " + lexicon[i])
+            exit(-1)
         word, tag = [x.casefold() for x in lexicon[i].rstrip('\n').split('\t')]
         if tag not in UTAG_MAP:
             print("Lexicon: " + l_name + ", line: " + str(i))
@@ -58,7 +63,7 @@ def write_ultimate_lexicon(ul, filename, lex_names):
     """
     with open(filename, 'w') as file:
         file.write('Word' + '\t' + '\t'.join(lex_names))
-        for word in ul.keys():
+        for word in sorted(ul.keys()):
             for tag in ul[word].keys():
                 file.write('\n' + word + '_' + tag + '\t' +
                            '\t'.join([str(x) for x in ul[word][tag].tolist()]))

@@ -1038,4 +1038,4 @@ if __name__ == "__main__":
     # align_particular(["cat-apathy"],[(0,3,2)])
     align_first_n(levels=[(0, 3, 3), (0, 1, 3), (0, 2, 3), (0, 4, 3), (1, 2, 3),
                           (1, 3, 3), (1, 4, 3), (2, 3, 3), (2, 4, 3),
-                          (3, 4, 3)], start="syrianrefugee-christmasgermany")
+                          (3, 4, 3)])
