@@ -21,7 +21,6 @@ src/nn/voc*
 src/nn/log.txt
 src/nn/dat_small.txt
 src/nn/README
-src/lexenstein/
 OED.txt
 Simple_OED.txt
 src/nn/cbow*
