@@ -5,8 +5,8 @@ different words in it.
 
 import sys
 from gensim.models import word2vec
-from nn.globdefs import *
-from nn.word2vecpos import EpochSaver
+from globdefs import *
+from word2vecpos import EpochSaver
 sys.path.append("../")
 import StanfordParse
 import re
@@ -19,6 +19,19 @@ EMBED_SIZE = 1300
 PREFIX = "SDGHKASJDGHKJA"  # A string that should not appear in the test itself
 DENSITY_LEVELS = [1, 5, 10, 50, 100]
 COSINE_LEVELS = [0.4, 0.3, 0.25]
+
+"""
+CHRIS_DATA = "/home/nlp/corpora/newsela_complex/" \
+             "Newsela_Complex_Words_Dataset_supplied.txt"
+MODEL_FILE = "/home/nlp/newsela/src/nn/cbow-2018-Jul-09-1733/epoch0.model"
+OUTPUT_FILE = "/home/af9562/density_Jul-09-1733_epoch0.tsv"
+# OUTPUT_FILE = "/home/nlp/corpora/newsela_complex/tmp/density_Jul-09-1733_epoch0.tsv"
+EMBED_SIZE = 1300
+PREFIX = "SDGHKASJDGHKJA"  # A string that should not appear in the test itself
+DENSITY_LEVELS = [1, 5, 10, 50, 100]
+COSINE_LEVELS = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.27, 0.25, 0.23, 0.2]
+TOPN = 64000
+"""
 # The topN numbers to consider when calculating the density measure
 
 
@@ -74,7 +87,7 @@ def tag_chris_data(filename):
 
 def get_tagged_data(lines, lines_tagged):
     """
-    Get the lines from teh Chris paper and teh lines from the tagged versino of
+    Get the lines from the Chris paper and teh lines from the tagged versino of
     the same data and return a list of words (one per line) in a form that
     should be accepted by the model
     :param lines:
@@ -178,7 +191,7 @@ def process_chris_data(filename, model, output_name, emb_size, EMBEDDINGS=True,
                 print("WW: word not in vocabulary: " + word)
                 vector = "0\t" * (emb_size - 1) + "0"
                 if COSINE:
-                    density = "0\t" * (len(COSINE_LEVELS) - 1) + "0"
+                    density = "-1\t" * (len(COSINE_LEVELS) * 2 - 1) + "-1"
                 else:
                     density = "0\t" * (len(DENSITY_LEVELS) - 1) + "0"
             elif word not in seenbefore:
@@ -192,16 +205,15 @@ def process_chris_data(filename, model, output_name, emb_size, EMBEDDINGS=True,
                 if COSINE:
                     density = []
                     for i in range(len(COSINE_LEVELS)):
-                        density.append(sum(x >= COSINE_LEVELS[i] for x in similar))
-                        j = 2
+                        density.append(sum(x[1] >= COSINE_LEVELS[i] for x in similar))
+                        j = 1
                         while density[-1] == len(similar):
                             similar = model.wv.most_similar(positive=[word],
                                                             topn=DENSITY_LEVELS[
-                                                                 -1] * j)
+                                                                 -1] * (2**j))
                             similar = [x[1] for x in similar]
                             j += 1
                             density[-1] = sum(x >= COSINE_LEVELS[i] for x in similar)
-
                 else:
                     density = [float(sum(similar[:d]))/d for d in DENSITY_LEVELS]
                 density = '\t'.join([str(x) for x in density])

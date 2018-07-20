@@ -14,12 +14,12 @@ import prepDataPOS as prepData
 MODEl_EXT = ".model"
 # For details see https://radimrehurek.com/gensim/models/word2vec.html
 SKIPGRAM = 0                # use CBOW
-EMBED_SIZE = 1300            # length of embedding vectors
+EMBED_SIZE = 1300           # length of embedding vectors
 WINDOW = 5
 # maximum distance between the current and predicted word
 ALPHA = 0.01                 # The initial learning rate.
 MIN_ALPHA = 1.0e-9          # Learning rate will linearly drop to min_alpha
-SEED = 13                   # Seed for the random number generator.
+SEED = 666                   # Seed for the random number generator.
 MIN_COUNT = 50
 # Ignores all words with total frequency lower than this.
 MAX_VOCAB_SIZE = None       # Limits the RAM during vocabulary building
