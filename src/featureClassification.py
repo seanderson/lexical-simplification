@@ -12,10 +12,13 @@ from nltk.corpus import wordnet
 from nltk.corpus import cmudict
 from keras.optimizers import adam
 from keras import backend as K
+from keras import optimizers
+from keras.callbacks import EarlyStopping
 from keras.models import Sequential
 from keras.layers.core import Activation
 from keras.layers.core import Dense
 from keras.optimizers import SGD
+from keras.wrappers.scikit_learn import KerasClassifier
 from tensorflow import cast
 from sklearn import datasets
 from sklearn import svm
@@ -31,9 +34,10 @@ import copy
 import random
 
 
-CWICTORIFY = False
+CWICTORIFY = True
 TESTCLASSIFY = False
 IMPORTDATA = False
+LINEAR_REG_TEST = True
 NNET = True
 KERAS = True
 GRIDSEARCH = False
@@ -41,22 +45,37 @@ BINARY_CATEGORIZATION = True
 BINARY_EVALUATION = BINARY_CATEGORIZATION or True
 ALL_COMPLEX = False
 REMOVE_ZEROS = False
+UNIQUE_ONLY = False
 DEBUG = False
 
+USE_WORD_VECS = False
 WORD_ONLY_CONFIG = [True, True, True, True, True, False, False, False, False, False, False, False, False]
-CONTEXT_ONLY_CONFIG = [False, False, False, False, False, True, True, True, True, True, True, True, True]
-ALL_FEATURES_CONFIG = [True, True, True, True, True, True, True, True, True, True, True, True, True]
+CONTEXT_ONLY_CONFIG = [False, False, False, False, False, False, True, True, True, True, True, True, True]
+ALL_FEATURES_CONFIG = [True, True, True, True, True, False, True, True, True, True, True, True, True]
 NO_FEATURES = [False, False, False, False, False, False, False, False, False, False, False, False, False]
 DENSITY_ONLY = [False, False, False, False, False, False, True, False, False, False, False, False, False]
-USE_WORD_VECS = True
 CURRENT_CONFIG = ALL_FEATURES_CONFIG
 
-NEWSELLA_SUPPLIED = paths.NEWSELA_COMPLEX + "Newsela_Complex_Words_Dataset_supplied.txt"
-CWICTOIFIED = paths.NEWSELA_COMPLEX + "Cwictorified.txt"
-SAVE_FILE = paths.NEWSELA_COMPLEX + "Feature_data.txt"
-GRAPH_FILE = paths.NEWSELA_COMPLEX + "Graph_output.txt"
-VEC_FILE = paths.NEWSELA_COMPLEX + "word_embeddings_Jul-05-1256_epoch0.tsv"
-DENSITY_FILE = paths.NEWSELA_COMPLEX + "density_Jul-09-1733_epoch0.tsv"
+KRIZ_SUPPLIED = paths.NEWSELA_COMPLEX + "Newsela_Complex_Words_Dataset_supplied.txt"
+ALIGNED_SUPPLIED = paths.NEWSELA_ALIGNED + "dataset.txt"
+KRIZ_CW = paths.NEWSELA_COMPLEX + "Cwictorified.txt"
+ALIGNED_CW = paths.NEWSELA_ALIGNED + "Cwictorified.txt"
+KRIZ_SAVE = paths.NEWSELA_COMPLEX + "Feature_data.txt"
+ALIGNED_SAVE = paths.NEWSELA_ALIGNED + "Feature_data.txt"
+KRIZ_GRAPH = paths.NEWSELA_COMPLEX + "Graph_output.txt"
+ALIGNED_GRAPH = None
+KRIZ_VECS = paths.NEWSELA_COMPLEX + "word_embeddings_Jul-05-1256_epoch0.tsv"
+ALIGNED_VECS = paths.NEWSELA_ALIGNED + "embeddings_Jul-05-1256_epoch0.tsv"
+KRIZ_DENSITIES = paths.NEWSELA_COMPLEX + "density_Jul-09-1733_epoch0.tsv"
+ALIGNED_DENSITIES = paths.NEWSELA_ALIGNED + "density_Jul-05-1256_epoch0.tsv"
+
+BINARY_COMPLEX_IN = True
+NEWSELLA_SUPPLIED = ALIGNED_SUPPLIED
+CWICTOIFIED = ALIGNED_CW
+SAVE_FILE = ALIGNED_SAVE
+GRAPH_FILE = KRIZ_GRAPH
+VEC_FILE = ALIGNED_VECS
+DENSITY_FILE = ALIGNED_DENSITIES
 
 
 def getStateAsString():
@@ -318,7 +337,7 @@ def collect_data(corpusPath, CWPath, vecPath, densPath):
             list[i].append(0)
 
         # graph score
-        list[i].append(graphScores[i])
+        #list[i].append(graphScores[i])
 
         # density score
         list[i].append(densities[i].split('\t')[-1])
@@ -382,7 +401,7 @@ def read_features(filepath, featureConfig=-1):
     with open(filepath) as file:
         lines = file.readlines()
     for line in lines:
-        data.append(line.split('\t')[3:-1])
+        data.append(line.split('\t')[3:])
     data = data[1:]
     if DEBUG:
         data = data[:100]
@@ -390,6 +409,7 @@ def read_features(filepath, featureConfig=-1):
         return data
     for featureSetInd in range(len(data)):
         featureSet = data[featureSetInd]
+        featureSet[-1] = featureSet[-1].rstrip('\n')
         featureInd = 0
         #while featureInd < len(data[featureSetInd]):
         while featureInd < len(featureConfig):
@@ -404,7 +424,27 @@ def read_features(filepath, featureConfig=-1):
             linesToRemove.append(data[lineInd])
     for ind in linesToRemove:
         data.remove(ind)
+    '''for i in range(len(data)):
+        data[i] = data[i][:-1]'''
     return data
+
+
+def remove_duplicates(X,Y):
+    linesToRemove = []
+    words = {}
+    for lineInd in range(len(X)):
+        if X[lineInd][-1] in words:
+            words[X[lineInd][-1]].append(lineInd)
+        else:
+            words[X[lineInd][-1]] = [lineInd]
+    for word in list(words):
+        if len(words[word]) > 1:
+            for instance in words[word]:
+                linesToRemove.append([X[instance],Y[instance]])
+    for line in linesToRemove:
+        X.remove(line[0])
+        Y.remove(line[1])
+    return X,Y
 
 
 def read_complexities(filepath):
@@ -430,7 +470,7 @@ def classify(data):
     :return: the trained SVM
     """
     clf = svm.SVC(C=1000.0, cache_size=500, gamma=1, kernel='rbf')
-    #clf = svm.SVC(kernel='rbf', C=1, verbose=False, probability=False, degree=3, shrinking=True, max_iter = -1, decision_function_shape='ovr', random_state=None, tol=0.001, cache_size=200, coef0=0.0, gamma=0.1, class_weight=None)
+    #clf = svm.SVC(kernel='brbf', C=1, verbose=False, probability=False, degree=3, shrinking=True, max_iter = -1, decision_function_shape='ovr', random_state=None, tol=0.001, cache_size=200, coef0=0.0, gamma=0.1, class_weight=None)
     clf.fit(data[0], data[1])
     return clf
 
@@ -442,6 +482,14 @@ def str_to_bin_category(item):
     :return: either 's' or 'c' depending on if item is less than 3
     """
     item = int(item)
+    if BINARY_COMPLEX_IN:
+        if item == 1:
+            return 'c'
+        elif item == 0:
+            return 's'
+        else:
+            print('PROBLEM CONVERTING BINARY IN TO STR; VAL NOT 1 OR 0')
+            return '?'
     if item < 3:
         return 's'
     else:
@@ -473,9 +521,9 @@ def five_fold_test(X, Y):
     if KERAS and NNET and BINARY_CATEGORIZATION:
         for j in range(len(available[1])):
             if available[1][j] == 's':
-                available[1][j] = 0
+                available[1][j] = [0,1]
             elif available[1][j] == 'c':
-                available[1][j] = 1
+                available[1][j] = [1,0]
             else:
                 print('PROBLEM: Y label '+str(j)+' not s or c')
     # print(calc_num_in_categories(available[1]))
@@ -501,31 +549,32 @@ def five_fold_test(X, Y):
                  train[1]]
         test = [scaler.transform(np.asarray(test[0]).astype(np.float)),
                 test[1]]
-        # SVM
+        # Run
         #clf = LogisticRegression()
         #clf.fit(train[0], train[1])
         if NNET:
             if not KERAS:
-                clf = MLPClassifier(hidden_layer_sizes=(10,), activation='tanh', alpha=0, solver='adam',learning_rate='adaptive')
+                clf = MLPClassifier(hidden_layer_sizes=(10,), activation='tanh', alpha=0, solver='adam', learning_rate='adaptive')
                 clf.fit(train[0], train[1])
                 preds = clf.predict(test[0])
             else:
-                clf = keras_NN(train[0], train[1])
-                preds = []
-                preds = clf.predict_on_batch(test[0])   # TEST
-                '''for j in range(len(test[0])):
-                    probs = clf.predict(np.asarray(test[0][j]))
-                    prediction = probs.argmax(axis=0)
-                    preds.append(prediction)'''
+                earlyStopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=2, verbose=1, mode='auto')
+                callbacks = [earlyStopping]
+                callbacks = None
+                train[0] = np.array(train[0])
+                train[1] = np.array(train[1])
+                clf = keras_NN(len(train[0][0]),(10,),.1)
+                clf.fit(train[0], train[1], epochs=50, batch_size=128, verbose=2, validation_split=.01, callbacks=callbacks,shuffle=True)
+                preds = clf.predict(test[0])
         else:
             clf = classify(train)
             preds = clf.predict(test[0])
         # results.append(calc_percent_right(test, preds))
+        if KERAS and BINARY_CATEGORIZATION and NNET:
+            preds = map(prob_arr_to_str, preds)
+            test[1] = map(bi_arr_to_str, test[1])
         results[0] = np.append(results[0], preds)
         results[1] = np.append(results[1], test[1])
-    if KERAS and BINARY_CATEGORIZATION and NNET:
-        results[0] = map(bi_nums_to_str, results[0])
-        results[1] = map(bi_nums_to_str, results[1])
     return results
 
 
@@ -537,6 +586,23 @@ def bi_nums_to_str(num):
     else:
         print('PROBLEM: num not 1 or 0')
         return '?'
+
+
+def bi_arr_to_str(arr):
+    if arr[0] == 1:
+        return 'c'
+    elif arr[1] == 1:
+        return 's'
+    else:
+        print('PROBLEM: arr not [0,1] or [1,0]')
+        return '?'
+
+
+def prob_arr_to_str(arr):
+    if arr[0] > arr[1]:
+        return 'c'
+    else:
+        return 's'
 
 
 def process_results(results):
@@ -622,16 +688,18 @@ def temp_kfold_test(X,Y):
     return scores
 
 
-def keras_NN(X, Y):
-    callbacks = []
-    X = np.array(X)
+def keras_NN(inDim, hiddenShape = (10,),learningRate = .001):
+    adam = optimizers.adam(lr= learningRate)
     model = Sequential()
-    model.add(Dense(10, input_dim=len(X[0]), init="uniform", activation="tanh"))
-    model.add(Dense(1))
+    for layer in range(len(hiddenShape)):
+        if layer == 0:
+            model.add(Dense(hiddenShape[layer], input_dim=inDim, kernel_initializer="uniform", activation="tanh"))
+        else:
+            model.add(Dense(hiddenShape[layer], kernel_initializer="uniform", activation="tanh"))
+    model.add(Dense(2))
     model.add(Activation("softmax"))
     print('Making network')
-    model.compile(loss="binary_crossentropy", optimizer='adam', metrics=['acc']) # TODO changes metric to custom_f1_scorer
-    model.fit(X, Y, epochs=50, batch_size=128, verbose=1)
+    model.compile(loss="binary_crossentropy", optimizer=adam, metrics=['acc'])
     return model
 
 
@@ -733,12 +801,8 @@ def calc_f_measure(precision, recall):
 def custom_f1_scorer(y, y_pred, **kwargs):
     if BINARY_CATEGORIZATION:
         if KERAS:
-            y = K.get_value(y)
-            y_pred = K.get_value(y_pred)
-            #y = cast(y,"int32")
-            #y_pred = cast(y_pred,'int32')
-            map(bi_nums_to_str, y)
-            map(bi_nums_to_str, y_pred)
+            y = map(bi_arr_to_str, y)
+            y_pred = map(bi_nums_to_str, y_pred)
         data = process_results_bin([y_pred,y])
     else:
         data = process_results([y_pred,y])
@@ -747,22 +811,54 @@ def custom_f1_scorer(y, y_pred, **kwargs):
     return calc_f_measure(precision, recall)
 
 
-def grid_search(X, Y):
+def grid_search(X, Y, cutoff=-1):
+    folds = 5
     print('doing grid search')
     '''if(BINARY_CATEGORIZATION):
         for i in range(len(Y)):
             Y[i] = str_to_bin_category(Y[i])'''
+    if cutoff > 0:
+        temp = list(zip(X, Y))
+        random.shuffle(temp)
+        X, Y = zip(*temp)
+        if cutoff>len(X):
+            print('Warning: cutoff larger than data; cutoff: '+str(cutoff)+' len data: '+str(len(X)))
+        else:
+            X = X[:cutoff]
+            Y = Y[:cutoff]
     if NNET:
-        # hiddenLayerSizes = [(60,),(40,),(20,),(15,),(10,),(5,),(1,)]
-        hiddenLayerSizes = [(300,150),(100,50,),(80,40,),(60,30,),(40,20,),(20,10,),(15,7,),(10,15,),(5,2,)]
-        activations = ['identity', 'logistic', 'tanh', 'relu']
-        solvers = ['lbfgs', 'sgd', 'adam']
-        learningRates = ['constant', 'invscaling', 'adaptive']
-        alphas = [.1, .001, .00001, .0000001]
-        parameters = {'hidden_layer_sizes': hiddenLayerSizes, 'activation': ['tanh'], 'solver': ['adam'], 'learning_rate': ['adaptive'], 'alpha': [0], 'early_stopping':[True]}
-        if DEBUG:
-            parameters = {'hidden_layer_sizes': [(20,), (10,)]}
-        evaluator = MLPClassifier()
+        if not KERAS:
+            # hiddenLayerSizes = [(60,),(40,),(20,),(15,),(10,),(5,),(1,)]
+            hiddenLayerSizes = [(300,150),(100,50,),(80,40,),(60,30,),(40,20,),(20,10,),(15,7,),(10,15,),(5,2,)]
+            activations = ['identity', 'logistic', 'tanh', 'relu']
+            solvers = ['lbfgs', 'sgd', 'adam']
+            learningRates = ['constant', 'invscaling', 'adaptive']
+            alphas = [.1, .001, .00001, .0000001]
+            parameters = {'hidden_layer_sizes': hiddenLayerSizes, 'activation': ['tanh'], 'solver': ['adam'], 'learning_rate': ['adaptive'], 'alpha': [0], 'early_stopping':[True]}
+            if DEBUG:
+                parameters = {'hidden_layer_sizes': [(20,), (10,)]}
+            evaluator = MLPClassifier()
+            scorer = make_scorer(custom_f1_scorer, labels=['c'], average=None)
+        else:
+            if BINARY_CATEGORIZATION:
+                Y = list(Y)
+                for j in range(len(Y)):
+                    if Y[j] == 's':
+                        Y[j] = [0, 1]
+                    elif Y[j] == 'c':
+                        Y[j] = [1, 0]
+                    else:
+                        print('PROBLEM: Y label ' + str(j) + ' not s or c')
+            inDim = [len(X[0])]
+            shapes = [(10,),(30,),(50,),(70,),(90,),(110,),(130,),(150,)]
+            s = [(3000,),(4000,),(5000,)]
+            shapes2L = [(1,1,),(100,50,),(500,250,),(1000,500,),(1500,750,),(2000,1000,),(2500,1250,),(3000,1500,),(4000,2000,),(5000,2500,)]
+            shapes3L = [(1,1,1,),(100,50,25,),(500,250,125,),(1000,500,125,),(1500,750,375,),(2000,1000,500,),(2500,1250,625,),(3000,1500,750,),(4000,2000,1000,),(5000,2500,1250,)]
+            shapes_weird_but_good = [(10,30,50,70,110,130,150)]
+            lrs = [.001]
+            parameters = {'inDim':inDim,'hiddenShape':shapes3L,'learningRate':lrs}
+            evaluator = KerasClassifier(build_fn=keras_NN, epochs=100,verbose=2)
+            scorer = make_scorer(custom_f1_scorer, labels=['c'], average=None)
     else:
         #parameters = {'kernel': ['rbf'], 'C': [.01, .1, 1, 10, 100, 1000],
         #              'gamma': [.001,.01,.1,1,10,100,1000]}
@@ -771,10 +867,10 @@ def grid_search(X, Y):
         if(DEBUG):
             parameters = {'kernel': ['rbf'], 'C': [1, 10], 'gamma': [1, 10], 'early_stopping': [True]}
         evaluator = svm.SVC()
+        scorer = make_scorer(custom_f1_scorer, labels=['c'], average=None)
     scaler = preprocessing.StandardScaler()
     X = scaler.fit_transform(X)
-    scorer = make_scorer(custom_f1_scorer, labels=['c'], average=None)
-    clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3, n_jobs=8, cv=7)
+    clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3, n_jobs=1, cv=folds)
     clf.fit(X,Y)
     scores = clf.cv_results_
     return clf.best_score_, clf.best_estimator_.get_params(), scores
@@ -784,6 +880,41 @@ def analyzeScores(scores):
     scoresMean = scores['mean_test_score']
     scoresMean = np.array(scoresMean)
     return scoresMean
+
+
+def test_kriz():
+    path = paths.NEWSELA_COMPLEX + 'Newsela_Complex_Words_Dataset.txt'
+    saveF = paths.NEWSELA_COMPLEX + 'delete_me.txt'
+    with open(path) as file:
+        lines = file.readlines()
+        for line in range(len(lines)):
+            lines[line] = lines[line].split('\t')
+    Scores = []
+    for line in lines:
+        Scores.append([line[0],line[2]])
+    linesToRemove = []
+    words = {}
+    for lineInd in range(len(Scores)):
+        if Scores[lineInd][0] in words:
+            words[Scores[lineInd][0]].append(lineInd)
+        else:
+            words[Scores[lineInd][0]] = [lineInd]
+    for word in list(words):
+        if len(words[word]) > 1:
+            for instance in words[word]:
+                linesToRemove.append([Scores[instance][0],Scores[instance][1]])
+    for line in linesToRemove:
+        Scores.remove([line[0],line[1]])
+    for i in range(len(Scores)):
+        Scores[i] = Scores[i][1]
+    allC = []
+    for score in Scores:
+        allC.append('c')
+    Scores = map(str_to_bin_category,Scores)
+    processedData = process_results_bin([allC,Scores])
+    precision = calc_precision(processedData)
+    recall = calc_recall(processedData)
+    print(precision, recall, calc_f_measure(precision, recall))
 
 
 if __name__ == '__main__':
@@ -799,11 +930,18 @@ if __name__ == '__main__':
     if IMPORTDATA:
         data = (collect_data(NEWSELLA_SUPPLIED, CWICTOIFIED, VEC_FILE, DENSITY_FILE))
         save(data, SAVE_FILE)
+        data = None
         # print(data)
+    if LINEAR_REG_TEST:
+        featureData = read_features(SAVE_FILE,[False, False, False, False, False, False, False, False, False, False, False, False, False])
     if not TESTCLASSIFY:
         config = CURRENT_CONFIG
         featureData = read_features(SAVE_FILE, config)
         complexScores = read_complexities(NEWSELLA_SUPPLIED)
+        if UNIQUE_ONLY:
+            featureData, complexScores = remove_duplicates(featureData,complexScores)
+        for i in range(len(featureData)):
+            featureData[i] = featureData[i][:-1]
         if REMOVE_ZEROS:
             tempX = []
             tempY = []
@@ -817,15 +955,16 @@ if __name__ == '__main__':
             for labelInd in range(len(complexScores)):
                 complexScores[labelInd] = str_to_bin_category(complexScores[labelInd])
         if GRIDSEARCH:
-            bestScore, bestEst, scores = grid_search(featureData,complexScores)
+            bestScore, bestEst, scores = grid_search(featureData,complexScores,cutoff=10000)
             print(analyzeScores(scores))
             print(str(bestScore))
             print(bestEst)
         rawDat = five_fold_test(featureData, complexScores)
+        featureData = None
+        complexScores = None
         if ALL_COMPLEX:
             if BINARY_EVALUATION:
                 for i in range(len(rawDat[0])):
-                    print(i)
                     rawDat[0][i] = 'c'
             else:
                 for i in range((len(rawDat[0]))):
@@ -834,9 +973,14 @@ if __name__ == '__main__':
             processedData = process_results_bin(rawDat)
         else:
             processedData = process_results(rawDat)
+        rawDat = None
         precision = calc_precision(processedData)
         recall = calc_recall(processedData)
         print(getStateAsString())
+        print('[simpleCorrect, simpleIncorrect, complexCorrect, complexIncorrect]:')
         print([len(category) for category in processedData])
+        print('% categorically correct')
         print(calc_percent_categorically_right(processedData))
+        print('(precision, recall, f_measure')
         print(precision, recall, calc_f_measure(precision, recall))
+        # test_kriz()
