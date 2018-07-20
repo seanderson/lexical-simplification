@@ -9,6 +9,10 @@ import classpaths as path
 import numpy
 import re
 # import utils_for_reno_kriz_data
+import sys
+sys.path.insert(0, '/home/nlp/newsela/monolingual-word-aligner/monolingual-word-aligner')
+
+# import aligner
 
 
 class Alignment(object):
@@ -35,10 +39,10 @@ class Alignment(object):
         :param s_ind1:
         :param part1:
         """
-        self.sent0 = sent0
-        self.sent1 = sent1
-        self.sent0 = sent0.split(';')[part0]
-        self.sent1 = sent1.split(';')[part1]
+        self.sent0 = sent0.rstrip(' ')
+        self.sent1 = sent1.rstrip(' ')
+        # self.sent0 = sent0.split(';')[part0]
+        # self.sent1 = sent1.split(';')[part1]
         self.part0 = part0
         self.part1 = part1
         self.ind0 = ind0
@@ -246,7 +250,7 @@ def get_aligned_sentences(metafile, slug, level1, level2, auto=True, use_spacy=F
     return sorted(new_result, key=lambda smth: smth.ind0, reverse=False)
 
 
-def convert_coordinates(old,pars):
+def convert_coordinates(old, pars):
     """
     Convert coordinates from those written in the -cmp- files to those needed in alignutils. First of all, the
     coordinates are made zer0-based instead of 1-based. Secondly, the part of the sentence separated by a semicolon
@@ -262,44 +266,121 @@ def convert_coordinates(old,pars):
     return old[0], i, old[1]-pars[old[0]][i][1]
 
 
-def output_alignments(file, sentpairs):
+def concatenate(alignments):
+    i = 0
+    while i < len(alignments):
+        j = i + 1
+        while j < len(alignments):
+            if alignments[i][0][1][0] == alignments[j][0][1][0]:
+                alignments[i][1][0] += " " + alignments[j][1][0]
+                alignments[i][1][1] += alignments[j][1][1]
+                # print("Created: " + alignments[i][1][0])
+                del alignments[j]
+            else:
+                j += 1
+        i += 1
+    i = 0
+    while i < len(alignments):
+        j = i + 1
+        while j < len(alignments):
+            if not set(alignments[i][1][1]).isdisjoint(alignments[j][1][1]):
+                alignments[i][0][0] += " " + alignments[j][0][0]
+                alignments[i][0][1] += alignments[j][0][1]
+                # print("Created(2): " + alignments[i][0][0])
+                del alignments[j]
+            else:
+                j += 1
+        i += 1
+
+
+def sultan_aligner(sent0, sent1, tags0, tags1, expectation):
+    """
+
+    :param sent0:
+    :param sent1:
+    :return:
+    """
+    if len(sent0) != len(sent1):
+        return
+    indexes, alignments = aligner.align(sent0, sent1)
+    alignments = [([alignments[i][0], [indexes[i][0] - 1]],
+                   [alignments[i][1], [indexes[i][1] - 1]]) for i in range(len(alignments))]
+    concatenate(alignments)
+    alignments = [x for x in alignments if x[0][0].lower() != x[1][0].lower() and x[0][0].lower() not in STOPWORDS and x[1][0].lower() not in STOPWORDS]
+    i = 0
+    while i < len(alignments):
+        a = alignments[i]
+        if len(a[0][1]) == 1 and len(a[1][1]) == 1:
+            alignments[i] = ([a[0][0], tags0[a[0][1][0]]], [a[1][0], tags1[a[1][1][0]]])
+            if alignments[i][0][1][0] != alignments[i][1][1][0]:
+                # print("parts of speech are different: " + str(alignments[i]))
+                pass
+            if smart_lemmatize(alignments[i][0][0], alignments[i][0][1]) == smart_lemmatize(alignments[i][1][0], alignments[i][1][1]):
+                del alignments[i]
+                continue
+        i += 1
+    if len(alignments) == expectation:
+        print(' '.join(sent0))
+        print (' '.join(sent1))
+        print(str(alignments) + '\n')
+
+
+def output_alignments(file, sentpairs, slug):
     """
 
     :param file:
     :param sentpairs:
     :return:
     """
+    ARTICLES = ['a', 'an', 'the']
     for alignment in sentpairs:
         if alignment.sent0 == alignment.sent1:
             continue
-        complex = [x for x in alignment.sent0.lower().split(' ') if x not in STOPWORDS]
-        simple = [x for x in alignment.sent1.lower().split(' ') if x not in STOPWORDS]
-        complex_lemmas = [Lemmatizer.lemmatize(x) for x in complex]
-        simple_lemmas = [Lemmatizer.lemmatize(x) for x in simple]
-        complex_only = [x for x in complex if x not in simple and Lemmatizer.lemmatize(x) not in simple_lemmas]
-        simple_only = [x for x in simple if x not in complex and Lemmatizer.lemmatize(x) not in complex_lemmas]
-        if len(complex_only) != 1 and len(simple_only) != 1:
+        alignment.sent0 = re.sub('  ', ' ', alignment.sent0).rstrip(' ').lstrip(' ')
+        alignment.sent1 = re.sub('  ', ' ', alignment.sent1).rstrip(' ').lstrip(' ')
+        complex = alignment.sent0.split(' ')
+        complex_tags = [x[1] for x in nltk.pos_tag(complex)]
+        complex = [(complex[i].lower(), i, complex_tags[i]) for i in range(len(complex))]
+        simple = alignment.sent1.split(' ')
+        simple_tags = [x[1] for x in nltk.pos_tag(simple)]
+        simple = [(simple[i].lower(), i, simple_tags[i], simple[i][0]) for i in range(len(simple))]
+        num_art_0 = sum(x[0] in ARTICLES for x in simple)
+        num_art_1 = sum(x[0] in ARTICLES for x in complex)
+        if num_art_0 != num_art_1:
             continue
-        file.write(complex + '\t' + simple + alignment.sent0.lower().rstrip('\n') + "\n")
+        complex_only = [x for x in complex if x[0] not in [y[0] for y in simple] and x[0] and re.match(r'.*[a-z0-9].*', x[0]) and x[0] not in ARTICLES and x[2] != "NNP"]
+        simple_only = [x for x in simple if x[0] not in [y[0] for y in complex] and x[0] and re.match(r'.*[a-z0-9].*', x[0]) and x[0] not in ARTICLES and x[2] != "NNP"]
+        if len(complex_only) != 1 or len(simple_only) != 1:
+            if len(complex_only) == len(simple_only) and len(complex_only) != 0:
+                continue
+                # sultan_aligner(alignment.sent0.split(' '), alignment.sent1.split(' '), complex_tags, simple_tags, len(simple_only))
+            continue
+        if complex_only[0][0] in STOPWORDS or simple_only[0][0] in STOPWORDS:
+            continue
+        if simple_only[0][2][0] != complex_only[0][2][0]:
+            # print("parts of speech are different: " + str(simple_only) + "\t" + str(complex_only))
+            pass
+        if smart_lemmatize(complex_only[0][0], complex_only[0][2]) == smart_lemmatize(simple_only[0][0], simple_only[0][2]):
+            continue
+        # if not re.match('[ -~]*[a-z][ -~]*', complex_only[0][0]) or not re.match('[ -~]*[a-z][ -~]*', simple_only[0][0]):
+            # continue
+        file.write(slug + "\t" + str(alignment.ind0) + "\t" + str(alignment.ind1) + "\n")
+        file.write(alignment.sent0.split(' ')[complex_only[0][1]] + '\t' + str(complex_only[0][1]) + '\t' + alignment.sent0.rstrip('\n') + "\n")
+        file.write(alignment.sent1.split(' ')[simple_only[0][1]] + '\t' + str(simple_only[0][1]) + '\t' + alignment.sent1.rstrip('\n') + "\n\n")
+        """file.write(alignment.sent0.split(' ')[complex_only[0][1]] + '\t' + str(
+            complex_only[0][1]) + '\t1\t' + alignment.sent0.rstrip('\n') + "\t" + slug + "\t" + str(alignment.ind0) + "\n")
+        complex = [x for x in complex if x[1] != complex_only[0][1]]
+        complex = [x for x in complex if x[0].lower() not in STOPWORDS and re.match('.*[a-zA-Z].*', x[0]) and x[2] != "NNP"]
+        for other in complex:
+            file.write(alignment.sent0.split(' ')[other[1]] + '\t' + str(other[1]) + '\t0\t' + alignment.sent0.rstrip('\n') + "\t" + slug + "\t" + str(alignment.ind0) + "\n")"""
 
 
 if __name__ == "__main__":
-    """Example use of get_aligned_sentences"""
-    """metafile = loadMetafile()
-    sentpairs = get_aligned_sentences(metafile, "10dollarbill-woman", 0, 1)
-    for alignment in sentpairs:
-        if alignment.sent0 != alignment.sent1:
-            print("FIRST-SENTENCE:" + str(alignment.ind0) + ':' + str(
-                alignment.p_ind0) + ':' + str(alignment.s_ind0) + ':' + str(
-                alignment.part0) + ' ' + alignment.sent0)
-            print("SECOND-SENTENCE:" + str(alignment.ind1) + ':' + str(
-                alignment.p_ind1) + ':' + str(alignment.s_ind1) + ':' + str(
-                alignment.part1) + ' ' + alignment.sent1)
-            print("\n")"""
-    with open("/home/nlp/newsela/ALIGNMENTSS.txt", "w") as file:
+    with open("/home/nlp/newsela/ALIGNMENTS.txt", "w") as file:
+        i = 0
         info = loadMetafile()
         nSlugs = 0
-        nToAlign = 10
+        nToAlign = -1
         levels = [(0, 1), (1, 2), (2, 3), (3, 4)]
         while (i < len(info)) and ((nToAlign == -1) or (nSlugs < nToAlign)):
             artLow = i  # first article with this slug
@@ -314,6 +395,7 @@ if __name__ == "__main__":
             for level in levels:
                 if level[1] < artHi - artLow:
                     sentpairs = get_aligned_sentences(info, slug, level[0], level[1])
-                    output_alignments(file, sentpairs)
+                    # output_alignments(file, sentpairs, slug + "\t" + "\t".join([str(x) for x in level]))
+                    output_alignments(file, sentpairs, slug)
                 else:
                     print("No such level: " + str(level[1]) + " in article: " + slug)
