@@ -191,7 +191,7 @@ def process_chris_data(filename, model, output_name, emb_size, EMBEDDINGS=True,
                 print("WW: word not in vocabulary: " + word)
                 vector = "0\t" * (emb_size - 1) + "0"
                 if COSINE:
-                    density = "-1\t" * (len(COSINE_LEVELS) * 2 - 1) + "-1"
+                    density = "0\t" * (len(COSINE_LEVELS) - 1) + "0"
                 else:
                     density = "0\t" * (len(DENSITY_LEVELS) - 1) + "0"
             elif word not in seenbefore:
@@ -205,7 +205,7 @@ def process_chris_data(filename, model, output_name, emb_size, EMBEDDINGS=True,
                 if COSINE:
                     density = []
                     for i in range(len(COSINE_LEVELS)):
-                        density.append(sum(x[1] >= COSINE_LEVELS[i] for x in similar))
+                        density.append(sum(x >= COSINE_LEVELS[i] for x in similar))
                         j = 1
                         while density[-1] == len(similar):
                             similar = model.wv.most_similar(positive=[word],
