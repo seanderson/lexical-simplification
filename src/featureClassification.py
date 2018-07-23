@@ -30,6 +30,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
 from sklearn.metrics import make_scorer
 from sklearn.metrics import confusion_matrix
+import analyzer
 import copy
 import random
 
@@ -41,8 +42,9 @@ LINEAR_REG_TEST = True
 NNET = True
 KERAS = True
 GRIDSEARCH = False
-BINARY_CATEGORIZATION = True
-BINARY_EVALUATION = BINARY_CATEGORIZATION or True
+DATA_TYPES = ['num', 'bi_num', 'bi_str', 'bi_arr']
+DATA_IN_TYPE = 'bi_num'
+DATA_USE_TYPE = 'bi_arr'
 ALL_COMPLEX = False
 REMOVE_ZEROS = False
 UNIQUE_ONLY = False
@@ -68,32 +70,183 @@ DENSITY_FILE = ALIGNED_DENSITIES
 def getStateAsString():
     s = ''
     s += 'NNET = ' + str(NNET) + '\n'
-    s += 'BINARY_CATEGORIZATION = ' + str(BINARY_CATEGORIZATION) + '\n'
+    s += 'DATA_IN_TYPE = ' + str(DATA_IN_TYPE) + '\n'
+    s += 'DATA_USE_TYPE = ' + str(DATA_USE_TYPE) + '\n'
     s += 'ALL_COMPLEX = ' + str(ALL_COMPLEX) + '\n'
     s += 'REMOVE_ZEROS = ' + str(REMOVE_ZEROS) + '\n'
     s += 'DEBUG = ' + str(DEBUG) + '\n'
     return s
 
 
-def str_to_bin_category(item):
+def convert_data(fromType, toType, data):
+    if fromType == toType:
+        return data
+    if fromType == 'num':
+        if DATA_USE_TYPE == 'bi_num':
+            data = map(num_to_bi_num, data)
+        elif DATA_USE_TYPE == 'bi_str':
+            data = map(num_to_str, data)
+        elif DATA_USE_TYPE == 'bi_arr':
+            data = map(num_to_arr, data)
+        else:
+            print('PROBLEM CONVERTING DATA: no converter set up for toType ' + toType)
+    elif fromType == 'bi_num':
+        if DATA_USE_TYPE == 'num':
+            data = map(bi_num_to_num, data)
+        elif DATA_USE_TYPE == 'bi_str':
+            data = map(bi_num_to_str, data)
+        elif DATA_USE_TYPE == 'bi_arr':
+            data = map(bi_num_to_arr, data)
+        else:
+            print('PROBLEM CONVERTING DATA: no converter set up for toType ' + toType)
+    elif fromType == 'bi_str':
+        if DATA_USE_TYPE == 'num':
+            data = map(str_to_num, data)
+        elif DATA_USE_TYPE == 'bi_num':
+            data = map(str_to_bi_num, data)
+        elif DATA_USE_TYPE == 'bi_arr':
+            data = map(str_to_arr, data)
+        else:
+            print('PROBLEM CONVERTING DATA: no converter set up for toType ' + toType)
+    elif fromType == 'bi_arr':
+        if DATA_USE_TYPE == 'num':
+            data = map(bi_arr_to_num, data)
+        elif DATA_USE_TYPE == 'bi_num':
+            data = map(bi_arr_to_bi_num, data)
+        elif DATA_USE_TYPE == 'bi_str':
+            data = map(bi_arr_to_str, data)
+        else:
+            print('PROBLEM CONVERTING DATA: no converter set up for toType ' + toType)
+    else:
+        print('PROBLEM CONVERTING DATA: no converter set up for fromType ' + fromType)
+    return data
+
+
+def num_to_bi_num(item):
+    item = int(item)
+    if item < 3:
+        return 0
+    else:
+        return 1
+
+
+def num_to_str(item):
     """
     Classifies item as either simple 's' or complex 'c'
     :param item: a number from 0-9
     :return: either 's' or 'c' depending on if item is less than 3
     """
     item = int(item)
-    if BINARY_COMPLEX_IN:
-        if item == 1:
-            return 'c'
-        elif item == 0:
-            return 's'
-        else:
-            print('PROBLEM CONVERTING BINARY IN TO STR; VAL NOT 1 OR 0')
-            return '?'
     if item < 3:
         return 's'
     else:
         return 'c'
+
+def num_to_arr(item):
+    item = int(item)
+    item = num_to_str(item)
+    return str_to_arr(item)
+
+
+def bi_num_to_num(num):
+    num = int(num)
+    if num == 0:
+        return 0
+    elif num == 1:
+        return 9
+    else:
+        print('PROBLEM: num not 1 or 0')
+        return -1
+
+
+def bi_num_to_str(num):
+    num = int(num)
+    if num == 1:
+        return 'c'
+    elif num == 0:
+        return 's'
+    else:
+        print('PROBLEM: num not 1 or 0')
+        return '?'
+
+
+def bi_num_to_arr(num):
+    str = bi_num_to_str(num)
+    return str_to_arr(str)
+
+
+def bi_arr_to_num(arr):
+    num = bi_arr_to_bi_num(arr)
+    return bi_arr_to_num(num)
+
+
+def bi_arr_to_bi_num(arr):
+    if arr[0] == 1:
+        return 1
+    elif arr[1] == 1:
+        return 0
+    else:
+        print('PROBLEM: arr not [0,1] or [1,0]')
+        return -1
+
+
+def bi_arr_to_str(arr):
+    if arr[0] == 1:
+        return 'c'
+    elif arr[1] == 1:
+        return 's'
+    else:
+        print('PROBLEM: arr not [0,1] or [1,0]')
+        return '?'
+
+
+def str_to_num(s):
+    num = str_to_bi_num(s)
+    return bi_num_to_num(num)
+
+
+def str_to_bi_num(s):
+    if s == 's':
+        return 0
+    elif s == 'c':
+        return 1
+    else:
+        print('PROBLEM: Y label ' + str(s) + ' not s or c')
+        return -1
+
+
+def str_to_arr(s):
+    if s == 's':
+        return [0, 1]
+    elif s == 'c':
+        return [1, 0]
+    else:
+        print('PROBLEM: Y label ' + str(s) + ' not s or c')
+        return [0, 0]
+
+
+def prob_num_to_num(num):
+    # TODO test
+    num = int(round(num))
+    possible = [0,1,2,3,4,5,6,7,8,9]
+    if num not in possible:
+        print('PROBLEM: prob_num_to_num expected to produce num in 1-9, got '+str(num))
+    return num
+
+
+def prob_bi_num_to_str(num):
+    # TODO test
+    if num > .5:
+        return 'c'
+    else:
+        return 's'
+
+
+def prob_arr_to_str(arr):
+    if arr[0] > arr[1]:
+        return 'c'
+    else:
+        return 's'
 
 
 def five_fold_test(X, Y):
@@ -116,16 +269,6 @@ def five_fold_test(X, Y):
     random.shuffle(temp)
     tempX, tempY = zip(*temp)
     available = [tempX, list(tempY)]
-    if not BINARY_CATEGORIZATION:
-        available[1] = map(int, available[1])
-    if KERAS and NNET and BINARY_CATEGORIZATION:
-        for j in range(len(available[1])):
-            if available[1][j] == 's':
-                available[1][j] = [0,1]
-            elif available[1][j] == 'c':
-                available[1][j] = [1,0]
-            else:
-                print('PROBLEM: Y label '+str(j)+' not s or c')
     # print(calc_num_in_categories(available[1]))
 
     # split into fifths
@@ -150,8 +293,6 @@ def five_fold_test(X, Y):
         test = [scaler.transform(np.asarray(test[0]).astype(np.float)),
                 test[1]]
         # Run
-        #clf = LogisticRegression()
-        #clf.fit(train[0], train[1])
         if NNET:
             if not KERAS:
                 clf = MLPClassifier(hidden_layer_sizes=(10,), activation='tanh', alpha=0, solver='adam', learning_rate='adaptive')
@@ -170,39 +311,21 @@ def five_fold_test(X, Y):
             clf = classify(train)
             preds = clf.predict(test[0])
         # results.append(calc_percent_right(test, preds))
-        if KERAS and BINARY_CATEGORIZATION and NNET:
-            preds = map(prob_arr_to_str, preds)
-            test[1] = map(bi_arr_to_str, test[1])
+        if DATA_USE_TYPE == 'bi_arr':
+            preds = map(prob_arr_to_str,preds)
+            intermediateType = 'bi_str'
+        elif DATA_USE_TYPE == 'num':
+            preds = map(prob_num_to_num, preds)
+            intermediateType = 'num'
+        elif DATA_USE_TYPE == 'bi_num':
+            preds = map(prob_bi_num_to_str, preds)
+            intermediateType = 'bi_str'
+        else:
+            intermediateType = DATA_USE_TYPE
+        preds = convert_data(intermediateType,DATA_USE_TYPE, preds)
         results[0] = np.append(results[0], preds)
         results[1] = np.append(results[1], test[1])
     return results
-
-
-def bi_nums_to_str(num):
-    if num == 1:
-        return 'c'
-    elif num == 0:
-        return 's'
-    else:
-        print('PROBLEM: num not 1 or 0')
-        return '?'
-
-
-def bi_arr_to_str(arr):
-    if arr[0] == 1:
-        return 'c'
-    elif arr[1] == 1:
-        return 's'
-    else:
-        print('PROBLEM: arr not [0,1] or [1,0]')
-        return '?'
-
-
-def prob_arr_to_str(arr):
-    if arr[0] > arr[1]:
-        return 'c'
-    else:
-        return 's'
 
 
 def classify(data):
@@ -247,6 +370,7 @@ def grid_search(X, Y, cutoff=-1):
         else:
             X = X[:cutoff]
             Y = Y[:cutoff]
+    sc = analyzer.Analyzer(DATA_USE_TYPE).getScorer()
     if NNET:
         if not KERAS:
             # hiddenLayerSizes = [(60,),(40,),(20,),(15,),(10,),(5,),(1,)]
@@ -259,17 +383,8 @@ def grid_search(X, Y, cutoff=-1):
             if DEBUG:
                 parameters = {'hidden_layer_sizes': [(20,), (10,)]}
             evaluator = MLPClassifier()
-            scorer = make_scorer(custom_f1_scorer, labels=['c'], average=None)
+            scorer = make_scorer(sc, labels=['c'], average=None)
         else:
-            if BINARY_CATEGORIZATION:
-                Y = list(Y)
-                for j in range(len(Y)):
-                    if Y[j] == 's':
-                        Y[j] = [0, 1]
-                    elif Y[j] == 'c':
-                        Y[j] = [1, 0]
-                    else:
-                        print('PROBLEM: Y label ' + str(j) + ' not s or c')
             inDim = [len(X[0])]
             shapes = [(10,),(30,),(50,),(70,),(90,),(110,),(130,),(150,)]
             s = [(3000,),(4000,),(5000,)]
@@ -279,7 +394,7 @@ def grid_search(X, Y, cutoff=-1):
             lrs = [.001]
             parameters = {'inDim':inDim,'hiddenShape':shapes3L,'learningRate':lrs}
             evaluator = KerasClassifier(build_fn=keras_NN, epochs=100,verbose=2)
-            scorer = make_scorer(custom_f1_scorer, labels=['c'], average=None)
+            scorer = make_scorer(sc, labels=['c'], average=None)
     else:
         #parameters = {'kernel': ['rbf'], 'C': [.01, .1, 1, 10, 100, 1000],
         #              'gamma': [.001,.01,.1,1,10,100,1000]}
@@ -288,7 +403,7 @@ def grid_search(X, Y, cutoff=-1):
         if(DEBUG):
             parameters = {'kernel': ['rbf'], 'C': [1, 10], 'gamma': [1, 10], 'early_stopping': [True]}
         evaluator = svm.SVC()
-        scorer = make_scorer(custom_f1_scorer, labels=['c'], average=None)
+        scorer = make_scorer(sc, labels=['c'], average=None)
     scaler = preprocessing.StandardScaler()
     X = scaler.fit_transform(X)
     clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3, n_jobs=1, cv=folds)
@@ -304,13 +419,14 @@ def analyzeScores(scores):
 
 
 if __name__ == '__main__':
+    analyzer = analyzer.Analyzer(DATA_USE_TYPE)
     if TESTCLASSIFY:
         iris = datasets.load_iris()
         rawDat = five_fold_test(iris.data, iris.target)
         processedData = []
         for i in range(len(rawDat[0])):
             processedData.append([rawDat[0][i],rawDat[1][i]])
-        print(calc_percent_right(processedData))
+        print(analyzer.calc_percent_right(processedData))
     if CWICTORIFY:
         cwictorify(NEWSELLA_SUPPLIED, CWICTOIFIED)
     if IMPORTDATA:
@@ -325,7 +441,7 @@ if __name__ == '__main__':
         complexScores = read_complexities(NEWSELLA_SUPPLIED)
         USE_WORD_VECS = temp
         for labelInd in range(len(complexScores)):
-            complexScores[labelInd] = str_to_bin_category(
+            complexScores[labelInd] = num_to_str(
                 complexScores[labelInd])
         model = LinearRegression()
         XTr, XTe, YTr, Yte = train_test_split(featureData,complexScores,test_size=.3)
@@ -348,9 +464,8 @@ if __name__ == '__main__':
                     tempY.append(featureData[labelInd])
             featureData = tempY
             complexScores = tempX
-        if BINARY_CATEGORIZATION:
-            for labelInd in range(len(complexScores)):
-                complexScores[labelInd] = str_to_bin_category(complexScores[labelInd])
+        if DATA_IN_TYPE != DATA_USE_TYPE:
+            featureData = convert_data(DATA_IN_TYPE,DATA_USE_TYPE, featureData)
         if GRIDSEARCH:
             bestScore, bestEst, scores = grid_search(featureData,complexScores,cutoff=10000)
             print(analyzeScores(scores))
@@ -360,24 +475,28 @@ if __name__ == '__main__':
         featureData = None
         complexScores = None
         if ALL_COMPLEX:
-            if BINARY_EVALUATION:
+            if DATA_USE_TYPE == 'bi_str':
                 for i in range(len(rawDat[0])):
                     rawDat[0][i] = 'c'
-            else:
+            elif DATA_USE_TYPE == 'num':
                 for i in range((len(rawDat[0]))):
                     rawDat[0][i] = 9
-        if BINARY_CATEGORIZATION:
-            processedData = process_results_bin(rawDat)
-        else:
-            processedData = process_results(rawDat)
+            elif DATA_USE_TYPE == 'bi_num':
+                for i in range((len(rawDat[0]))):
+                    rawDat[0][i] = 1
+            elif DATA_USE_TYPE == 'bi_arr':
+                for i in range((len(rawDat[0]))):
+                    rawDat[0][i] = [1,0]
+            else:
+                print('ERROR: DATA_USE_TYPE '+DATA_USE_TYPE+' does not have an ALL_COMPLEX case')
+        processedData = analyzer.process_results(rawDat)
         rawDat = None
-        precision = calc_precision(processedData)
-        recall = calc_recall(processedData)
+        precision = analyzer.calc_precision(processedData)
+        recall = analyzer.calc_recall(processedData)
         print(getStateAsString())
         print('[simpleCorrect, simpleIncorrect, complexCorrect, complexIncorrect]:')
         print([len(category) for category in processedData])
         print('% categorically correct')
-        print(calc_percent_categorically_right(processedData))
+        print(analyzer.calc_percent_categorically_right(processedData))
         print('(precision, recall, f_measure')
-        print(precision, recall, calc_f_measure(precision, recall))
-        # test_kriz()
+        print(precision, recall, analyzer.calc_f_measure(precision, recall))
