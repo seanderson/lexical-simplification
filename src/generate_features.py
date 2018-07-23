@@ -22,24 +22,6 @@ BINARY = lambda x: 0 if int(x) <= 3  else 1
 """
 
 
-class Feature:
-    """
-    A simple container that represents a feature
-    """
-
-    def __init__(self, name, function, dependencies=[]):
-        """
-        Create a feature
-        :param name:
-        :param function:
-        :param dependencies: A list of feature names that must be calculated
-        prior to this feature
-        """
-        self.name = name
-        self.function = function
-        self.dependencies = dependencies
-
-
 class CustomFeatureEstimator:
 
     tag_to_num = {}
