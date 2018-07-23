@@ -1,16 +1,22 @@
-from lexenstein.morphadorner import MorphAdornerToolkit
+from lexenstein.morphadorner import MorphAdornerToolkit  # for syllable count
 import numpy
 import statistics
 import classpaths as paths
 from nltk.corpus import wordnet as wn
-from newsela_pos import *
+from newsela_pos import *  # POS tagger
 import gensim
 
 
-EMB_SIZE = 500
 ORIGINAL_DATA = paths.NEWSELA_ALIGNED + "dataset.txt"
+# the data in "Chris" format, i.e. a line with tab-separated values:
+# word  ind score   sentence    substituition (the latter is optional)
 FEATURE_DIR = paths.NEWSELA_ALIGNED + "features"
+# the directory to which all the numpy arrays will be stored
 EMB_MODEL = paths.NEWSELA_ALIGNED + "model.bin"
+# current model is trained with vectors of size 500, window = 5
+# alpha = 0.01, min_alpha = 1.0e-9, negative sampling = 5. The third epoch is
+# taken because it shows the best score on SimLex-999
+EMB_SIZE = 500
 BINARY = lambda x: int(x)
 
 """
@@ -18,38 +24,68 @@ ORIGINAL_DATA = \
     paths.NEWSELA_COMPLEX + "Newsela_Complex_Words_Dataset_supplied.txt"
 FEATURE_DIR = paths.NEWSELA_COMPLEX + "features"
 EMB_MODEL = paths.NEWSELA_COMPLEX + "model.bin"
+EMB_SIZE = 500
 BINARY = lambda x: 0 if int(x) <= 3  else 1 
 """
 
 
 class CustomFeatureEstimator:
 
-    tag_to_num = {}
-    num_to_tag = {}
+    tag_to_num = {'A': 5, 'MD': 2, 'PDT': 9, 'RP': 8, 'IN': 6, '-RRB-': 7,
+                  'CC': 11, 'LS': 17, 'J': 3, 'SYM': 18, 'N': 1, 'P': 12,
+                  'UH': 16, 'W': 15, 'V': 0, '-LRB-': 13, 'DT': 10, 'CD': 4,
+                  'FW': 14}
+    num_to_tag = {0: 'V', 1: 'N', 2: 'MD', 3: 'J', 4: 'CD', 5: 'A', 6: 'IN',
+                  7: '-RRB-', 8: 'RP', 9: 'PDT', 10: 'DT', 11: 'CC', 12: 'P',
+                  13: '-LRB-', 14: 'FW', 15: 'W', 16: 'UH', 17: 'LS', 18: 'SYM'}
 
     def __init__(self, feature_names):
         """
         Creates an instance of the FeatureEstimator class.
+        :param feature_names: the features to calculate when running
+        calculate_features
+        """
+        self.all_features = {}
+        self.fill_all_features()
+        self.results = {}
+        self.features = [self.all_features[name] for name in feature_names]
+        # self.features is an array of features that will be used during this
+        # particular run
+        for i in range(len(self.features)):
+            for dependency in self.features[i]['dep']:
+                # some features require that another feature is executed
+                # beforehand (e.g. word vectors need to know the POS tags)
+                if dependency not in [x['name'] for x in self.features[:i]]:
+                    print("Feature " + dependency + " should come before feature "
+                                                    + self.features[i]['name'])
+                    try:
+                        self.results[dependency] = \
+                            numpy.load(FEATURE_DIR + '/' + dependency + '.npy')
+                    except:
+                        exit(-1)
+                    print("A saved version of the former is loaded from a file")
+
+    def fill_all_features(self):
+        """
+        Create the "all_features" dictionary that can be used to look up feature
+        names and associated functions
+        :return:
         """
         self.all_features = {
-            "sent_syllab": {"func": self.sent_syllable_feature, "dep": ["word_count"]},
+            "sent_syllab": {"func": self.sent_syllable_feature,
+                            "dep": ["word_count"]},
             "word_syllab": {"func": self.word_syllable_feature, "dep": []},
             "word_count": {"func": self.word_count_feature, "dep": []},
-            "mean_word_length": {"func": self.mean_word_length_feature, "dep": []},
+            "mean_word_length": {"func": self.mean_word_length_feature,
+                                 "dep": []},
             "synset_count": {"func": self.synset_count_feature, "dep": []},
             "synonym_count": {"func": self.synonym_count_feature, "dep": []},
-            "POS": {"func": self.pos_tag_feature, "dep": []}
+            "POS": {"func": self.pos_tag_feature, "dep": []},
+            "labels": {"func": self.get_labels, "dep": []},
+            "wv": {"func": self.word_embeddings_feature, "dep": ["POS"]}
         }
         for key in self.all_features:
             self.all_features[key]["name"] = key
-        self.features = [self.all_features[name] for name in feature_names]
-        for i in range(len(self.features)):
-            for dependency in self.features[i]['dep']:
-                if dependency not in [x['name'] for x in self.features[:i]]:
-                    print("Feature " + dependency + " must come before feature "
-                                                    + self.features[i]['name'])
-                    exit(-1)
-        self.results = {}
 
     def calculate_features(self, data):
         """
@@ -192,6 +228,8 @@ class CustomFeatureEstimator:
                 self.num_to_tag[next_id] = tag
                 next_id += 1
             result.append(self.tag_to_num[tag])
+        print(self.tag_to_num)
+        print(self.num_to_tag)
         return result
 
     def word_embeddings_feature(self, data):
@@ -200,37 +238,25 @@ class CustomFeatureEstimator:
         :param data:  See the entry for calculate_features
         :return:
         """
-        """result = []
-        dict = {}  # a dictionary needed so that recalculating values is
-        # not an issue
+        result = []
         model = gensim.models.KeyedVectors.load_word2vec_format(EMB_MODEL,
                                                                 binary=True)
-        for line in data:
-            target = line['words'][0] + '_' + self.results['POS']
-            if target in model.vocab:
-            for word in line['words']:
-                words = subst.strip().split(':')[1].strip()
-                word_vector = numpy.zeros(size)
-                for word in words.split(' '):
-                        try:
-                            word_vector = numpy.add(word_vector, model[words])
-                        except KeyError:
-                            pass
-                    result.append(word_vector)
-            for i in range(0, len(result)):
-                result[i] = result[i].tolist()
-            return result"""
+        for i in range(len(data)):
+            tag = self.num_to_tag[self.results['POS'][i]]
+            target = data[i]['words'][0] + '_' + tag
+            if target not in model.vocab:
+                result.append(numpy.zeros(EMB_SIZE))
+            else:
+                result.append(model[target])
+            return result
 
-    def get_word_vector(self, word, model, dict):
+    def get_labels(self, data):
         """
-        Look up the word in dict. If it is in dict, return the entry,
-        if not, get the vector from the model,
-        if this vector does not exist, return an empty numpy array
-        :param word:
-        :param model:
-        :param dict:
+        Create a list of labels (scores)
+        :param data:
         :return:
         """
+        return [line['score'] for line in data]
 
 
 def get_raw_data():
@@ -241,13 +267,11 @@ def get_raw_data():
     with open(ORIGINAL_DATA) as file:
         lines = file.readlines()
     lines = [line.rstrip('\n').split('\t') for line in lines]
-    lines = [{'words': [x[0]], 'sent': x[3], 'inds': [x[1]]}
-             for x in lines]
+    lines = [{'words': [x[0]], 'sent': x[3], 'inds': [int(x[1])],
+              'score':BINARY(x[2])} for x in lines]
     return lines
 
 
 if __name__ == "__main__":
-    fe = CustomFeatureEstimator(["word_count", "sent_syllab", "word_syllab",
-                             "mean_word_length", "synset_count",
-                             "synonym_count"])
+    fe = CustomFeatureEstimator(["word_syllab", "word_count"])
     fe.calculate_features(get_raw_data())

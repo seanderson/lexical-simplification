@@ -7,7 +7,7 @@ import StanfordParse
 import re
 from lexenstein.util import getGeneralisedPOS
 
-PREFIX = "SasHKA&()DG,KJA"  # A string that should not appear in the text itself
+PREFIX = "SasHKADGKJA"  # A string that should not appear in the text itself
 TAGGING_DIRECTORY = "/home/nlp/corpora/newsela_aligned/"
 # a directory there all the tagged files go
 
@@ -61,13 +61,13 @@ def verify_data(lines, lines_tagged):
     """
     final_lines = []
     for i in range(len(lines)):
-        word = lines[i]['words'][0]
+        word = lines[i]['words'][0].lower()
         ind = lines[i]['inds'][0]
-        line = lines[i]['sent']
+        line = lines[i]['sent'].lower()
         if re.match('.*f331e.s3.amazonaws.com.*?&gt ; .*', line) and ind > 0:
             ind -= 23
         line = re.sub('.*f331e.s3.amazonaws.com.*?&gt ; ', '', line).split(' ')
-        line_tagged = lines_tagged[i].rstrip('\n').casefold()
+        line_tagged = lines_tagged[i].rstrip('\n').lower()
         line_tagged = re.sub('.*f331e.s3.amazonaws.com.*?&_cc gt_nn ;_: ', '',
                              line_tagged)
         line_tagged = re.sub('a\.m\._nn \._\.', 'a.m._nn',
@@ -108,4 +108,4 @@ def get_tags(text):
     :param text:
     :return:
     """
-    return verify_data(tag_data(text))
+    return verify_data(text, tag_data(text))
