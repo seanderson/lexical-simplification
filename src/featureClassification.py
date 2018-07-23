@@ -31,6 +31,7 @@ from sklearn.metrics import f1_score
 from sklearn.metrics import make_scorer
 from sklearn.metrics import confusion_matrix
 import analyzer
+import dataLoader
 import copy
 import random
 
@@ -428,17 +429,17 @@ if __name__ == '__main__':
             processedData.append([rawDat[0][i],rawDat[1][i]])
         print(analyzer.calc_percent_right(processedData))
     if CWICTORIFY:
-        cwictorify(NEWSELLA_SUPPLIED, CWICTOIFIED)
+        dataLoader.cwictorify(NEWSELLA_SUPPLIED, CWICTOIFIED)
     if IMPORTDATA:
-        data = (collect_data(NEWSELLA_SUPPLIED, CWICTOIFIED, VEC_FILE, DENSITY_FILE))
-        save(data, SAVE_FILE)
+        data = (dataLoader.collect_data(NEWSELLA_SUPPLIED, CWICTOIFIED, VEC_FILE, DENSITY_FILE))
+        dataLoader.save(data, SAVE_FILE)
         data = None
         # print(data)
     if LINEAR_REG_TEST:
         temp = USE_WORD_VECS
         USE_WORD_VECS = False
-        featureData = read_features(SAVE_FILE,[True, False, False, False, False, False, False, False, False, False, False, False, False])
-        complexScores = read_complexities(NEWSELLA_SUPPLIED)
+        featureData = dataLoader.read_features(SAVE_FILE,[True, False, False, False, False, False, False, False, False, False, False, False, False])
+        complexScores = dataLoader.read_complexities(NEWSELLA_SUPPLIED)
         USE_WORD_VECS = temp
         for labelInd in range(len(complexScores)):
             complexScores[labelInd] = num_to_str(
@@ -449,10 +450,10 @@ if __name__ == '__main__':
         preds = model.predict(XTe)
     if not TESTCLASSIFY:
         config = CURRENT_CONFIG
-        featureData = read_features(SAVE_FILE, config)
-        complexScores = read_complexities(NEWSELLA_SUPPLIED)
+        featureData = dataLoader.read_features(SAVE_FILE, config)
+        complexScores = dataLoader.read_complexities(NEWSELLA_SUPPLIED)
         if UNIQUE_ONLY:
-            featureData, complexScores = remove_duplicates(featureData,complexScores)
+            featureData, complexScores = dataLoader.remove_duplicates(featureData,complexScores)
         for i in range(len(featureData)):
             featureData[i] = featureData[i][:-1]
         if REMOVE_ZEROS:

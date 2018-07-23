@@ -28,6 +28,7 @@ from sklearn.metrics import make_scorer
 from sklearn.metrics import confusion_matrix
 import copy
 import random
+import generate_features
 
 
 def read_features(filepath, featureConfig=-1):
@@ -105,3 +106,26 @@ def read_complexities(filepath):
     if DEBUG:
         complexities = complexities[:100]
     return complexities
+
+
+def read_from_new():
+    files = ["word_count", "sent_syllab", "word_syllab",
+             "mean_word_length", "synset_count",
+             "synonym_count"]
+    features = []
+    lines = []
+    path = generate_features.FEATURE_DIR
+    for file in files:
+        features.append(numpy.load(path + '/' + file + '.npy'))
+    for i in range(len(features[0])):
+        l = []
+        for featureInd in range(len(features)):
+            l.append(features[featureInd][i])
+        lines.append(l)
+    return lines
+
+
+if __name__ == '__main__':
+    feats = read_from_new()
+    for feat in feats:
+        print(feat)
