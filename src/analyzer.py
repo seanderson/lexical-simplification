@@ -1,38 +1,25 @@
-import numpy
-from lexenstein.identifiers import *
-from lexenstein.features import *
-from lexenstein.morphadorner import MorphAdornerToolkit
-import classpaths as paths
-from nltk.corpus import wordnet
-from nltk.corpus import cmudict
-from keras.optimizers import adam
-from keras import backend as K
-from keras import optimizers
-from keras.callbacks import EarlyStopping
-from keras.models import Sequential
-from keras.layers.core import Activation
-from keras.layers.core import Dense
-from keras.optimizers import SGD
-from keras.wrappers.scikit_learn import KerasClassifier
-from tensorflow import cast
-from sklearn import datasets
-from sklearn import svm
-from sklearn import preprocessing
-from sklearn.linear_model import LinearRegression
-from sklearn.neural_network import MLPClassifier
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import GridSearchCV
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import f1_score
-from sklearn.metrics import make_scorer
 from sklearn.metrics import confusion_matrix
-import copy
-import random
+import featureClassification
+
 
 class Analyzer:
-    def __init__(self,BINARY_INPUT, BINARY_EVALUATION):
-        self.BIN_IN = BINARY_INPUT
-        self.BIN_EVAL = BINARY_EVALUATION
+
+    DATA_TYPES = ['num', 'bi_num', 'bi_str', 'bi_arr']
+    BINARY_TYPES = ['bi_num', 'bi_str', 'bi_arr']
+    ARR_POSSIBILITIES = [[1,0],[0,1]]
+    NUM_POSSIBILITIES = [0,1,2,3,4,5,6,7,8,9]
+    STR_POSSIBILITIES = ['c','s']
+
+    def __init__(self,data_type):
+        if data_type  in Analyzer.DATA_TYPES:
+            self.DATA_TYPE = data_type
+        elif data_type in self.ARR_POSSIBILITIES:
+            self.DATA_TYPE = 'bi_arr'
+        elif data_type in self.NUM_POSSIBILITIES:
+            self.DATA_TYPE = 'num'
+        elif data_type in self.STR_POSSIBILITIES:
+            self.DATA_TYPES = 'bi_arr'
+        print('ERROR: unrecognized data_type')
 
 
     def calc_num_in_categories(l):
@@ -47,7 +34,6 @@ class Analyzer:
                 categories.append(0)
             categories[num] += 1
         return categories
-
 
     def calc_percent_right(processedDataCategory):
         """
@@ -67,14 +53,14 @@ class Analyzer:
         return float(numRight) / float(len(check))
 
     def process_results(self, results):
-        if self.BIN_IN:
-            return self.process_results(results)
-        elif self.BIN_EVAL:
-            return  self.process_results_bin_eval(results)
+        if self.DATA_TYPE in Analyzer.BINARY_TYPES:
+            results = featureClassification.convert_data(self.DATA_TYPE,'bi_str',results)
+            return Analyzer.process_results_bi_str(results)
         else:
-            return self.process_results_reg(results)
+            results = featureClassification.convert_data(self.DATA_TYPES, 'num', results)
+            return Analyzer.process_results_reg(results)
 
-    def process_results_reg(self, results):
+    def process_results_reg(results):
         '''
         reformats results into a confusion matrix
         :param results: [predicted categorizations, actual categorizations]
@@ -88,15 +74,13 @@ class Analyzer:
         data = confusion_matrix(actual, pred, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
         return data
 
-
     '''          correct    incorrect       A v P > complex  simple  
         complex     TP          FN          complex  CC TP  CI FN
          simple     TN          FP           simple  SI FP  SC TN
         [TN, FP, TP, FN]
     '''
 
-
-    def process_results_bin(results):
+    def process_results_bi_str(results):
         """
         A version of process_results that uses 's' and 'c' rather than comparing
         the category to 3
@@ -123,42 +107,18 @@ class Analyzer:
         data = [simpleCorrect, simpleIncorrect, complexCorrect, complexIncorrect]
         return data
 
-    def process_results_bin_eval(results):
-        simpleCorrect = []
-        simpleIncorrect = []
-        complexCorrect = []
-        complexIncorrect = []
-        for i in range(len(results[0])):
-            right = int(results[1][i])
-            pred = int(results[0][i])
-            if right < 3:
-                if pred < 3:
-                    simpleCorrect.append([pred, right])
-                else:
-                    simpleIncorrect.append([pred, right])
-            else:
-                if pred >= 3:
-                    complexCorrect.append([pred, right])
-                else:
-                    complexIncorrect.append([pred, right])
-        data = [simpleCorrect, simpleIncorrect, complexCorrect, complexIncorrect]
-        return data
-
-
     def calc_TP(pData):
         TP = 0
         for i in range(len(pData[0])):
             TP += pData[i][i]
         return TP
 
-
-    def calc_avg_percent_right(pData):
+    def calc_avg_percent_right(self, pData):
         avg = 0
         for i in range(len(pData)):
-            avg += calc_percent_right(pData[i])
+            avg += self.calc_percent_right(pData[i])
         avg /= i
         return avg
-
 
     def calc_percent_categorically_right(self, pData):
         if self.BIN_EVAL:
@@ -168,53 +128,62 @@ class Analyzer:
         else:
             return 0
 
-
-    def calc_precision(self, pData):
-        if self.BIN_EVAL:
-            TP = len(pData[2])
-            FP = len(pData[1])
+    def calc_precision(pData):
+        TP = len(pData[2])
+        FP = len(pData[1])
         if TP + FP == 0:
             return 0
         return float(TP) / float(TP + FP)
 
-
-    def calc_recall(self, pData):
-        if self.BIN_EVAL:
-            TP = len(pData[2])
-            FN = len(pData[3])
+    def calc_recall(pData):
+        TP = len(pData[2])
+        FN = len(pData[3])
         if TP + FN == 0:
             return 0
         return float(TP) / float(TP + FN)
-
 
     def calc_f_measure(precision, recall):
         if precision + recall == 0:
             return -1
         return 2 * precision * recall / (precision + recall)
 
-
     def getScorer(self):
-        if self.BIN_IN:
-            return
-        elif self.BIN_EVAL:
-            return
-        else:
-            return reg_scorer
+        scorers = [Analyzer.reg_scorer, Analyzer.bi_num_scorer,Analyzer.bi_str_scorer,Analyzer.bi_arr_scorer]
+        for i in range(len(Analyzer.DATA_TYPES)):
+            if Analyzer.DATA_TYPES[i] == self.DATA_TYPE:
+                return scorers[i]
+        print('ERROR: scorer not found')
+        return None
 
     def reg_scorer(y, y_pred, **kwargs):
-        data = process_resgiults([y_pred, y])
-        precision = calc_recall(data)
-        recall = calc_recall(data)
-        return calc_f_measure(precision, recall)
+        data = Analyzer.process_results_reg([y_pred, y])
+        precision = Analyzer.calc_recall(data)
+        recall = Analyzer.calc_recall(data)
+        return Analyzer.calc_f_measure(precision, recall)
+
+    def bi_str_scorer(y, y_pred, **kwargs):
+        data = Analyzer.process_results_bi_str([y_pred, y])
+        precision = Analyzer.calc_recall(data)
+        recall = Analyzer.calc_recall(data)
+        return Analyzer.calc_f_measure(precision, recall)
+
+    def bi_num_scorer(y, y_pred, **kwargs):
+        y = featureClassification.convert_data('bi_num', 'bi_str', y)
+        y_pred = featureClassification.convert_data('bi_num', 'bi_str', y_pred)
+        data = Analyzer.process_results_bi_str([y_pred, y])
+        precision = Analyzer.calc_recall(data)
+        recall = Analyzer.calc_recall(data)
+        return Analyzer.calc_f_measure(precision, recall)
+
+    def bi_arr_scorer(y, y_pred, **kwargs):
+        y = featureClassification.convert_data('bi_arr', 'bi_str', y)
+        y_pred = featureClassification.convert_data('bi_arr', 'bi_str', y_pred)
+        data = Analyzer.process_results_bi_str([y_pred,y])
+        precision = Analyzer.calc_recall(data)
+        recall = Analyzer.calc_recall(data)
+        return Analyzer.calc_f_measure(precision, recall)
 
     def custom_f1_scorer(y, y_pred, **kwargs):
-        if BINARY_CATEGORIZATION:
-            if KERAS:
-                y = map(bi_arr_to_str, y)
-                y_pred = map(bi_nums_to_str, y_pred)
-            data = process_results_bin([y_pred, y])
-        else:
-            data = process_results([y_pred, y])
-        precision = calc_recall(data)
-        recall = calc_recall(data)
-        return calc_f_measure(precision, recall)
+        a = Analyzer(y[0])
+        scorer = a.getScorer()
+        return scorer(y, y_pred, **kwargs)
