@@ -13,8 +13,7 @@ To run the algorithm, use align_all or align_particular methods of the *align.py
 
 ## Complex Word Identification
 
-*generate_features.py* is a module that allows one to assess the values of various word-level and sentence-level lexical features,
-such as the number of synonyms, the number of senses, etc.
+*generate_features.py* is a module that allows one to assess the values of various word-level and sentence-level lexical features. The list of avaliable features includes: synonym count, wordnet synset count, word syllable count, sentence average word syllable count, sentence length (in words), word embedding values, hit freqency
 
 *classpaths.py* is a module that stores pthas to various executables, language models, etc. 
 This file might have to be modified, if the code is moved to a different machine
