@@ -36,13 +36,13 @@ import generate_features
 import copy
 import random
 
-
+SCALE = True
 TESTCLASSIFY = False
 IMPORTDATA = False
 LINEAR_REG_TEST = False
 NNET = True
 KERAS = True
-GRIDSEARCH = True
+GRIDSEARCH = False
 DATA_TYPES = ['num', 'bi_num', 'bi_str', 'bi_arr']
 DATA_IN_TYPE = 'bi_num'
 DATA_USE_TYPE = 'bi_arr'
@@ -272,7 +272,7 @@ def five_fold_test(X, Y):
         fifths[i][1] = available[1][n*i:n*(i+1)]
 
     for i in range(numTimesToTest):
-        print("Testing: " + str(i) + " Out of " + str(numTimesToTest))
+        print("Testing: " + str(i+1) + " Out of " + str(numTimesToTest))
         test = fifths[i]
         train = [[],[]]
         for j in range(len(fifths)):
@@ -280,11 +280,15 @@ def five_fold_test(X, Y):
                 train[0] += fifths[j][0]
                 train[1] += fifths[j][1]
         # standardize feature data
-        scaler = preprocessing.StandardScaler()
-        train = [scaler.fit_transform(np.asarray(train[0]).astype(np.float)),
-                 train[1]]
-        test = [scaler.transform(np.asarray(test[0]).astype(np.float)),
-                test[1]]
+        if not SCALE:
+            train = [np.asarray(train[0]).astype(np.float),train[1]]
+            test = [np.asarray(test[0]).astype(np.float), test[1]]
+        else:
+            scaler = preprocessing.StandardScaler()
+            train = [scaler.fit_transform(np.asarray(train[0]).astype(np.float)),
+                     train[1]]
+            test = [scaler.transform(np.asarray(test[0]).astype(np.float)),
+                    test[1]]
         # Run
         if NNET:
             if not KERAS:
@@ -297,7 +301,7 @@ def five_fold_test(X, Y):
                 callbacks = None
                 train[0] = np.array(train[0])
                 train[1] = np.array(train[1])
-                clf = keras_NN(len(train[0][0]),(10,),.1)
+                clf = keras_NN(len(train[0][0]),(3000, 1500, 750),.1)
                 clf.fit(train[0], train[1], epochs=50, batch_size=128, verbose=2, validation_split=.01, callbacks=callbacks,shuffle=True)
                 preds = clf.predict(test[0])
         else:
@@ -385,7 +389,7 @@ def grid_search(X, Y, cutoff=-1):
             shapes3L = [(1,1,1,),(100,50,25,),(500,250,125,),(1000,500,125,),(1500,750,375,),(2000,1000,500,),(2500,1250,625,),(3000,1500,750,),(4000,2000,1000,),(5000,2500,1250,)]
             shapes_weird_but_good = [(10,30,50,70,110,130,150)]
             lrs = [.001]
-            parameters = {'inDim':inDim,'hiddenShape':shapes3L,'learningRate':lrs}
+            parameters = {'inDim':inDim,'hiddenShape':s,'learningRate':lrs}
             evaluator = KerasClassifier(build_fn=keras_NN, epochs=100,verbose=2)
             scorer = make_scorer(a.getScorer(), labels=['c'], average=None)
     else:
@@ -397,8 +401,11 @@ def grid_search(X, Y, cutoff=-1):
             parameters = {'kernel': ['rbf'], 'C': [1, 10], 'gamma': [1, 10], 'early_stopping': [True]}
         evaluator = svm.SVC()
         scorer = make_scorer(a.getScorer(), labels=['c'], average=None)
-    scaler = preprocessing.StandardScaler()
-    X = scaler.fit_transform(X)
+    if SCALE:
+        scaler = preprocessing.StandardScaler()
+        X = scaler.fit_transform(X)
+    else:
+        X = numpy.asarray(X)
     clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3, n_jobs=1, cv=folds)
     clf.fit(X,Y)
     scores = clf.cv_results_
@@ -435,7 +442,7 @@ if __name__ == '__main__':
         XTr, XTe, YTr, Yte = train_test_split(featureData,complexScores,test_size=.3)
         model.fit(XTr,YTr)
         preds = model.predict(XTe)
-    if not TESTCLASSIFY:
+    if not TESTCLASSIFY or LINEAR_REG_TEST:
         fe = generate_features.CustomFeatureEstimator(["POS", "sent_syllab", "word_syllab",
                                      "word_count", "mean_word_length", "wv",
                                      "synset_count", "synonym_count", "labels"])
@@ -479,8 +486,8 @@ if __name__ == '__main__':
                 print('ERROR: DATA_USE_TYPE '+DATA_USE_TYPE+' does not have an ALL_COMPLEX case')
         processedData = a.process_results(rawDat)
         rawDat = None
-        precision = analyzer.Analyzer.calc_precision(processedData)
-        recall = analyzer.Analyzer.calc_recall(processedData)
+        precision = analyzer.calc_precision(processedData)
+        recall = analyzer.calc_recall(processedData)
         print(getStateAsString())
         print('[simpleCorrect, simpleIncorrect, complexCorrect, complexIncorrect]:')
         print([len(category) for category in processedData])
