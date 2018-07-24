@@ -24,14 +24,19 @@ class Analyzer:
         """
         if data_type in Analyzer.DATA_TYPES:
             self.DATA_TYPE = data_type
+            return
         elif data_type in self.ARR_POSSIBILITIES:
             self.DATA_TYPE = 'bi_arr'
+            return
         elif data_type in self.NUM_POSSIBILITIES:
             self.DATA_TYPE = 'num'
+            return
         elif data_type in self.STR_POSSIBILITIES:
             self.DATA_TYPES = 'bi_str'
+            return
         elif data_type in self.BI_NUM_POSSIBILITIES:
             self.DATA_TYPES = 'bi_num'
+            return 
         print('ERROR: unrecognized data_type')
 
     def calc_num_in_categories(l):

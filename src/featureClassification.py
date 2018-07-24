@@ -32,13 +32,13 @@ from sklearn.metrics import make_scorer
 from sklearn.metrics import confusion_matrix
 import analyzer
 import dataLoader
+import generate_features
 import copy
 import random
 
 
-CWICTORIFY = True
 TESTCLASSIFY = False
-IMPORTDATA = False
+IMPORTDATA = True
 LINEAR_REG_TEST = True
 NNET = True
 KERAS = True
@@ -58,14 +58,6 @@ ALL_FEATURES_CONFIG = [True, True, True, True, True, False, True, True, True, Tr
 NO_FEATURES = [False, False, False, False, False, False, False, False, False, False, False, False, False]
 DENSITY_ONLY = [False, False, False, False, False, False, True, False, False, False, False, False, False]
 CURRENT_CONFIG = ALL_FEATURES_CONFIG
-
-BINARY_COMPLEX_IN = True
-NEWSELLA_SUPPLIED = ALIGNED_SUPPLIED
-CWICTOIFIED = ALIGNED_CW
-SAVE_FILE = ALIGNED_SAVE
-GRAPH_FILE = KRIZ_GRAPH
-VEC_FILE = ALIGNED_VECS
-DENSITY_FILE = ALIGNED_DENSITIES
 
 
 def getStateAsString():
@@ -421,27 +413,27 @@ def analyzeScores(scores):
 
 
 if __name__ == '__main__':
-    analyzer = analyzer.Analyzer(DATA_USE_TYPE)
+    a = analyzer.Analyzer(DATA_USE_TYPE)
     if TESTCLASSIFY:
         iris = datasets.load_iris()
         rawDat = five_fold_test(iris.data, iris.target)
         processedData = []
         for i in range(len(rawDat[0])):
             processedData.append([rawDat[0][i],rawDat[1][i]])
-        print(analyzer.calc_percent_right(processedData))
-    if CWICTORIFY:
-        dataLoader.cwictorify(NEWSELLA_SUPPLIED, CWICTOIFIED)
+        print(a.calc_percent_right(processedData))
     if IMPORTDATA:
-        data = (dataLoader.collect_data(NEWSELLA_SUPPLIED, CWICTOIFIED, VEC_FILE, DENSITY_FILE))
-        dataLoader.save(data, SAVE_FILE)
-        data = None
-        # print(data)
+        fe = generate_features.CustomFeatureEstimator(["POS", "sent_syllab", "word_syllab",
+                                     "word_count", "mean_word_length", "wv",
+                                     "synset_count", "synonym_count", "labels"])
+        # TODO: Average synsets and synonyms count and n-gram frequencies
+        fe.calculate_features(generate_features.get_raw_data())
     if LINEAR_REG_TEST:
-        temp = USE_WORD_VECS
-        USE_WORD_VECS = False
-        featureData = dataLoader.read_features(SAVE_FILE,[True, False, False, False, False, False, False, False, False, False, False, False, False])
-        complexScores = dataLoader.read_complexities(NEWSELLA_SUPPLIED)
-        USE_WORD_VECS = temp
+        fe = generate_features.CustomFeatureEstimator(
+            ["POS", "sent_syllab", "word_syllab",
+             "word_count", "mean_word_length", "wv",
+             "synset_count", "synonym_count", "labels"])
+        featureData = fe.load_features()
+        complexScores = fe.load_labels()
         for labelInd in range(len(complexScores)):
             complexScores[labelInd] = num_to_str(
                 complexScores[labelInd])
@@ -450,9 +442,11 @@ if __name__ == '__main__':
         model.fit(XTr,YTr)
         preds = model.predict(XTe)
     if not TESTCLASSIFY:
-        config = CURRENT_CONFIG
-        featureData = dataLoader.read_features(SAVE_FILE, config)
-        complexScores = dataLoader.read_complexities(NEWSELLA_SUPPLIED)
+        fe = generate_features.CustomFeatureEstimator(["POS", "sent_syllab", "word_syllab",
+                                     "word_count", "mean_word_length", "wv",
+                                     "synset_count", "synonym_count", "labels"])
+        featureData = fe.load_features()
+        complexScores = fe.load_labels()
         if UNIQUE_ONLY:
             featureData, complexScores = dataLoader.remove_duplicates(featureData,complexScores)
         for i in range(len(featureData)):
@@ -491,14 +485,14 @@ if __name__ == '__main__':
                     rawDat[0][i] = [1,0]
             else:
                 print('ERROR: DATA_USE_TYPE '+DATA_USE_TYPE+' does not have an ALL_COMPLEX case')
-        processedData = analyzer.process_results(rawDat)
+        processedData = a.process_results(rawDat)
         rawDat = None
-        precision = analyzer.calc_precision(processedData)
-        recall = analyzer.calc_recall(processedData)
+        precision = a.calc_precision(processedData)
+        recall = a.calc_recall(processedData)
         print(getStateAsString())
         print('[simpleCorrect, simpleIncorrect, complexCorrect, complexIncorrect]:')
         print([len(category) for category in processedData])
         print('% categorically correct')
-        print(analyzer.calc_percent_categorically_right(processedData))
+        print(a.calc_percent_categorically_right(processedData))
         print('(precision, recall, f_measure')
-        print(precision, recall, analyzer.calc_f_measure(precision, recall))
+        print(precision, recall, a.calc_f_measure(precision, recall))
