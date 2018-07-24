@@ -4,23 +4,35 @@ import featureClassification
 
 class Analyzer:
 
+    # num = int 0-9 (>3 = complex)
+    # bi_num = 1 or 0
+    # bi_str = 's' or 'c'
+    # bi_arr = [1,0] (complex) or [0,1] (simple)
+
     DATA_TYPES = ['num', 'bi_num', 'bi_str', 'bi_arr']
     BINARY_TYPES = ['bi_num', 'bi_str', 'bi_arr']
     ARR_POSSIBILITIES = [[1,0],[0,1]]
     NUM_POSSIBILITIES = [0,1,2,3,4,5,6,7,8,9]
+    BI_NUM_POSSIBILITIES = [1,0]
     STR_POSSIBILITIES = ['c','s']
 
     def __init__(self,data_type):
-        if data_type  in Analyzer.DATA_TYPES:
+        """
+        initializes self.DATA_TYPE given an input in DATA_TYPES or an example of
+        the data format
+        :param data_type:
+        """
+        if data_type in Analyzer.DATA_TYPES:
             self.DATA_TYPE = data_type
         elif data_type in self.ARR_POSSIBILITIES:
             self.DATA_TYPE = 'bi_arr'
         elif data_type in self.NUM_POSSIBILITIES:
             self.DATA_TYPE = 'num'
         elif data_type in self.STR_POSSIBILITIES:
-            self.DATA_TYPES = 'bi_arr'
+            self.DATA_TYPES = 'bi_str'
+        elif data_type in self.BI_NUM_POSSIBILITIES:
+            self.DATA_TYPES = 'bi_num'
         print('ERROR: unrecognized data_type')
-
 
     def calc_num_in_categories(l):
         """
@@ -39,7 +51,7 @@ class Analyzer:
         """
         calculates the % right from a list [predicted category, actual category]
         :param processedDataCategory:
-        :return:
+        :return: % correct
         """
         if len(processedDataCategory) == 0:
             return 0
@@ -53,6 +65,11 @@ class Analyzer:
         return float(numRight) / float(len(check))
 
     def process_results(self, results):
+        """
+        processes results for any format of data in DATA_TYPES
+        :param results: [predicted categorizations, actual categorizations]
+        :return: a confusion matrix
+        """
         if self.DATA_TYPE in Analyzer.BINARY_TYPES:
             results = featureClassification.convert_data(self.DATA_TYPE,'bi_str',results)
             return Analyzer.process_results_bi_str(results)
@@ -114,6 +131,12 @@ class Analyzer:
         return TP
 
     def calc_avg_percent_right(self, pData):
+        """
+        calculates the average percent right over multiple lists in pData
+        :param pData: data that has been fed through one of the process_results
+        methods
+        :return: avg % right
+        """
         avg = 0
         for i in range(len(pData)):
             avg += self.calc_percent_right(pData[i])
@@ -121,6 +144,12 @@ class Analyzer:
         return avg
 
     def calc_percent_categorically_right(self, pData):
+        """
+        calculates the % right
+        :param pData: data that has been fed through one of the process_results
+        methods
+        :return:
+        """
         if self.BIN_EVAL:
             return float(len(pData[0]) + len(pData[2])) / \
                    float(sum([len(pData[0]), len(pData[1]), len(pData[2]),
@@ -129,6 +158,11 @@ class Analyzer:
             return 0
 
     def calc_precision(pData):
+        """
+        :param pData: data that has been fed through one of the process_results
+        methods
+        :return: precision
+        """
         TP = len(pData[2])
         FP = len(pData[1])
         if TP + FP == 0:
@@ -136,6 +170,11 @@ class Analyzer:
         return float(TP) / float(TP + FP)
 
     def calc_recall(pData):
+        """
+        :param pData: data that has been fed through one of the process_results
+        methods
+        :return: recall
+        """
         TP = len(pData[2])
         FN = len(pData[3])
         if TP + FN == 0:
@@ -143,11 +182,19 @@ class Analyzer:
         return float(TP) / float(TP + FN)
 
     def calc_f_measure(precision, recall):
+        """
+        calculates f score from precision and recall
+        :return: f measure
+        """
         if precision + recall == 0:
             return -1
         return 2 * precision * recall / (precision + recall)
 
     def getScorer(self):
+        """
+        gets a scorer that fits DATA_TYPE
+        :return: a scorer function
+        """
         scorers = [Analyzer.reg_scorer, Analyzer.bi_num_scorer,Analyzer.bi_str_scorer,Analyzer.bi_arr_scorer]
         for i in range(len(Analyzer.DATA_TYPES)):
             if Analyzer.DATA_TYPES[i] == self.DATA_TYPE:
@@ -156,18 +203,39 @@ class Analyzer:
         return None
 
     def reg_scorer(y, y_pred, **kwargs):
+        """
+        scores data if data is type num
+        :param y: actual labels
+        :param y_pred: predicted labels
+        :param kwargs:
+        :return: the f score
+        """
         data = Analyzer.process_results_reg([y_pred, y])
         precision = Analyzer.calc_recall(data)
         recall = Analyzer.calc_recall(data)
         return Analyzer.calc_f_measure(precision, recall)
 
     def bi_str_scorer(y, y_pred, **kwargs):
+        """
+        scores data if data is type bi_str
+        :param y: actual labels
+        :param y_pred: predicted labels
+        :param kwargs:
+        :return: the f score
+        """
         data = Analyzer.process_results_bi_str([y_pred, y])
         precision = Analyzer.calc_recall(data)
         recall = Analyzer.calc_recall(data)
         return Analyzer.calc_f_measure(precision, recall)
 
     def bi_num_scorer(y, y_pred, **kwargs):
+        """
+        scores data if data is type bi_num
+        :param y: actual labels
+        :param y_pred: predicted labels
+        :param kwargs:
+        :return: the f score
+        """
         y = featureClassification.convert_data('bi_num', 'bi_str', y)
         y_pred = featureClassification.convert_data('bi_num', 'bi_str', y_pred)
         data = Analyzer.process_results_bi_str([y_pred, y])
@@ -176,6 +244,13 @@ class Analyzer:
         return Analyzer.calc_f_measure(precision, recall)
 
     def bi_arr_scorer(y, y_pred, **kwargs):
+        """
+        scores data if data is type bi_arr
+        :param y: actual labels
+        :param y_pred: predicted labels
+        :param kwargs:
+        :return: the f score
+        """
         y = featureClassification.convert_data('bi_arr', 'bi_str', y)
         y_pred = featureClassification.convert_data('bi_arr', 'bi_str', y_pred)
         data = Analyzer.process_results_bi_str([y_pred,y])
@@ -184,6 +259,13 @@ class Analyzer:
         return Analyzer.calc_f_measure(precision, recall)
 
     def custom_f1_scorer(y, y_pred, **kwargs):
+        """
+        scores data if data is in DATA_TYPES
+        :param y: actual labels
+        :param y_pred: predicted labels
+        :param kwargs:
+        :return: the f score
+        """
         a = Analyzer(y[0])
         scorer = a.getScorer()
         return scorer(y, y_pred, **kwargs)

@@ -143,6 +143,7 @@ def num_to_str(item):
     else:
         return 'c'
 
+
 def num_to_arr(item):
     item = int(item)
     item = num_to_str(item)
