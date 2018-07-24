@@ -61,6 +61,9 @@ def verify_data(lines, lines_tagged):
     """
     final_lines = []
     for i in range(len(lines)):
+        if not lines[i]['words']:
+            final_lines.append('PHRASE')
+            continue
         word = lines[i]['words'][0].lower()
         ind = lines[i]['inds'][0]
         line = lines[i]['sent'].lower()
