@@ -38,11 +38,11 @@ import random
 
 
 TESTCLASSIFY = False
-IMPORTDATA = True
-LINEAR_REG_TEST = True
+IMPORTDATA = False
+LINEAR_REG_TEST = False
 NNET = True
 KERAS = True
-GRIDSEARCH = False
+GRIDSEARCH = True
 DATA_TYPES = ['num', 'bi_num', 'bi_str', 'bi_arr']
 DATA_IN_TYPE = 'bi_num'
 DATA_USE_TYPE = 'bi_arr'
@@ -51,11 +51,10 @@ REMOVE_ZEROS = False
 UNIQUE_ONLY = False
 DEBUG = False
 
-USE_WORD_VECS = False
-WORD_ONLY_CONFIG = [True, True, True, True, True, False, False, False, False, False, False, False, False]
-CONTEXT_ONLY_CONFIG = [False, False, False, False, False, False, True, True, True, True, True, True, True]
-ALL_FEATURES_CONFIG = [True, True, True, True, True, False, True, True, True, True, True, True, True]
-NO_FEATURES = [False, False, False, False, False, False, False, False, False, False, False, False, False]
+WORD_ONLY_CONFIG = ["POS","word_syllab","wv","synset_count", "synonym_count"]
+CONTEXT_ONLY_CONFIG = ["sent_syllab","word_count","mean_word_length"]
+ALL_FEATURES_CONFIG = ["POS", "sent_syllab", "word_syllab", "word_count", "mean_word_length", "wv", "synset_count", "synonym_count", "labels"]
+ONLY_VECS = ["wv"]
 DENSITY_ONLY = [False, False, False, False, False, False, True, False, False, False, False, False, False]
 CURRENT_CONFIG = ALL_FEATURES_CONFIG
 
@@ -75,41 +74,41 @@ def convert_data(fromType, toType, data):
     if fromType == toType:
         return data
     if fromType == 'num':
-        if DATA_USE_TYPE == 'bi_num':
+        if toType == 'bi_num':
             data = map(num_to_bi_num, data)
-        elif DATA_USE_TYPE == 'bi_str':
+        elif toType == 'bi_str':
             data = map(num_to_str, data)
-        elif DATA_USE_TYPE == 'bi_arr':
+        elif toType == 'bi_arr':
             data = map(num_to_arr, data)
         else:
-            print('PROBLEM CONVERTING DATA: no converter set up for toType ' + toType)
+            print('PROBLEM CONVERTING DATA: no converter set up for toType '+toType+' from type '+fromType)
     elif fromType == 'bi_num':
-        if DATA_USE_TYPE == 'num':
+        if toType == 'num':
             data = map(bi_num_to_num, data)
-        elif DATA_USE_TYPE == 'bi_str':
+        elif toType == 'bi_str':
             data = map(bi_num_to_str, data)
-        elif DATA_USE_TYPE == 'bi_arr':
+        elif toType == 'bi_arr':
             data = map(bi_num_to_arr, data)
         else:
-            print('PROBLEM CONVERTING DATA: no converter set up for toType ' + toType)
+            print('PROBLEM CONVERTING DATA: no converter set up for toType ' +toType+' from type '+fromType)
     elif fromType == 'bi_str':
-        if DATA_USE_TYPE == 'num':
+        if toType == 'num':
             data = map(str_to_num, data)
-        elif DATA_USE_TYPE == 'bi_num':
+        elif toType == 'bi_num':
             data = map(str_to_bi_num, data)
-        elif DATA_USE_TYPE == 'bi_arr':
+        elif toType == 'bi_arr':
             data = map(str_to_arr, data)
         else:
-            print('PROBLEM CONVERTING DATA: no converter set up for toType ' + toType)
+            print('PROBLEM CONVERTING DATA: no converter set up for toType '+ toType+' from type '+fromType)
     elif fromType == 'bi_arr':
-        if DATA_USE_TYPE == 'num':
+        if toType == 'num':
             data = map(bi_arr_to_num, data)
-        elif DATA_USE_TYPE == 'bi_num':
+        elif toType == 'bi_num':
             data = map(bi_arr_to_bi_num, data)
-        elif DATA_USE_TYPE == 'bi_str':
+        elif toType == 'bi_str':
             data = map(bi_arr_to_str, data)
         else:
-            print('PROBLEM CONVERTING DATA: no converter set up for toType ' + toType)
+            print('PROBLEM CONVERTING DATA: no converter set up for toType ' +toType+' from type '+fromType)
     else:
         print('PROBLEM CONVERTING DATA: no converter set up for fromType ' + fromType)
     return data
@@ -364,7 +363,7 @@ def grid_search(X, Y, cutoff=-1):
         else:
             X = X[:cutoff]
             Y = Y[:cutoff]
-    sc = analyzer.Analyzer(DATA_USE_TYPE).getScorer()
+    a = analyzer.Analyzer(DATA_USE_TYPE)
     if NNET:
         if not KERAS:
             # hiddenLayerSizes = [(60,),(40,),(20,),(15,),(10,),(5,),(1,)]
@@ -377,7 +376,7 @@ def grid_search(X, Y, cutoff=-1):
             if DEBUG:
                 parameters = {'hidden_layer_sizes': [(20,), (10,)]}
             evaluator = MLPClassifier()
-            scorer = make_scorer(sc, labels=['c'], average=None)
+            scorer = make_scorer(a.getScorer(), labels=['c'], average=None)
         else:
             inDim = [len(X[0])]
             shapes = [(10,),(30,),(50,),(70,),(90,),(110,),(130,),(150,)]
@@ -388,7 +387,7 @@ def grid_search(X, Y, cutoff=-1):
             lrs = [.001]
             parameters = {'inDim':inDim,'hiddenShape':shapes3L,'learningRate':lrs}
             evaluator = KerasClassifier(build_fn=keras_NN, epochs=100,verbose=2)
-            scorer = make_scorer(sc, labels=['c'], average=None)
+            scorer = make_scorer(a.getScorer(), labels=['c'], average=None)
     else:
         #parameters = {'kernel': ['rbf'], 'C': [.01, .1, 1, 10, 100, 1000],
         #              'gamma': [.001,.01,.1,1,10,100,1000]}
@@ -397,7 +396,7 @@ def grid_search(X, Y, cutoff=-1):
         if(DEBUG):
             parameters = {'kernel': ['rbf'], 'C': [1, 10], 'gamma': [1, 10], 'early_stopping': [True]}
         evaluator = svm.SVC()
-        scorer = make_scorer(sc, labels=['c'], average=None)
+        scorer = make_scorer(a.getScorer(), labels=['c'], average=None)
     scaler = preprocessing.StandardScaler()
     X = scaler.fit_transform(X)
     clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3, n_jobs=1, cv=folds)
@@ -422,16 +421,11 @@ if __name__ == '__main__':
             processedData.append([rawDat[0][i],rawDat[1][i]])
         print(a.calc_percent_right(processedData))
     if IMPORTDATA:
-        fe = generate_features.CustomFeatureEstimator(["POS", "sent_syllab", "word_syllab",
-                                     "word_count", "mean_word_length", "wv",
-                                     "synset_count", "synonym_count", "labels"])
+        fe = generate_features.CustomFeatureEstimator(ALL_FEATURES_CONFIG)
         # TODO: Average synsets and synonyms count and n-gram frequencies
         fe.calculate_features(generate_features.get_raw_data())
     if LINEAR_REG_TEST:
-        fe = generate_features.CustomFeatureEstimator(
-            ["POS", "sent_syllab", "word_syllab",
-             "word_count", "mean_word_length", "wv",
-             "synset_count", "synonym_count", "labels"])
+        fe = generate_features.CustomFeatureEstimator(CURRENT_CONFIG)
         featureData = fe.load_features()
         complexScores = fe.load_labels()
         for labelInd in range(len(complexScores)):
@@ -449,8 +443,6 @@ if __name__ == '__main__':
         complexScores = fe.load_labels()
         if UNIQUE_ONLY:
             featureData, complexScores = dataLoader.remove_duplicates(featureData,complexScores)
-        for i in range(len(featureData)):
-            featureData[i] = featureData[i][:-1]
         if REMOVE_ZEROS:
             tempX = []
             tempY = []
@@ -461,7 +453,7 @@ if __name__ == '__main__':
             featureData = tempY
             complexScores = tempX
         if DATA_IN_TYPE != DATA_USE_TYPE:
-            featureData = convert_data(DATA_IN_TYPE,DATA_USE_TYPE, featureData)
+            complexScores = convert_data(DATA_IN_TYPE,DATA_USE_TYPE, complexScores)
         if GRIDSEARCH:
             bestScore, bestEst, scores = grid_search(featureData,complexScores,cutoff=10000)
             print(analyzeScores(scores))
@@ -487,12 +479,12 @@ if __name__ == '__main__':
                 print('ERROR: DATA_USE_TYPE '+DATA_USE_TYPE+' does not have an ALL_COMPLEX case')
         processedData = a.process_results(rawDat)
         rawDat = None
-        precision = a.calc_precision(processedData)
-        recall = a.calc_recall(processedData)
+        precision = analyzer.Analyzer.calc_precision(processedData)
+        recall = analyzer.Analyzer.calc_recall(processedData)
         print(getStateAsString())
         print('[simpleCorrect, simpleIncorrect, complexCorrect, complexIncorrect]:')
         print([len(category) for category in processedData])
         print('% categorically correct')
         print(a.calc_percent_categorically_right(processedData))
         print('(precision, recall, f_measure')
-        print(precision, recall, a.calc_f_measure(precision, recall))
+        print(precision, recall, analyzer.Analyzer.calc_f_measure(precision, recall))
