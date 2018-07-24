@@ -10,7 +10,7 @@ import gensim
 ORIGINAL_DATA = paths.NEWSELA_ALIGNED + "dataset.txt"
 # the data in "Chris" format, i.e. a line with tab-separated values:
 # word  ind score   sentence    substituition (the latter is optional)
-FEATURE_DIR = paths.NEWSELA_ALIGNED + "features"
+FEATURE_DIR = paths.NEWSELA_ALIGNED + "features/"
 # the directory to which all the numpy arrays will be stored
 EMB_MODEL = paths.NEWSELA_ALIGNED + "model.bin"
 # current model is trained with vectors of size 500, window = 5
@@ -22,7 +22,7 @@ BINARY = lambda x: int(x)
 """
 ORIGINAL_DATA = \
     paths.NEWSELA_COMPLEX + "Newsela_Complex_Words_Dataset_supplied.txt"
-FEATURE_DIR = paths.NEWSELA_COMPLEX + "features"
+FEATURE_DIR = paths.NEWSELA_COMPLEX + "features/"
 EMB_MODEL = paths.NEWSELA_COMPLEX + "model.bin"
 EMB_SIZE = 500
 BINARY = lambda x: 0 if int(x) <= 3  else 1 
@@ -39,7 +39,7 @@ class CustomFeatureEstimator:
                   7: '-RRB-', 8: 'RP', 9: 'PDT', 10: 'DT', 11: 'CC', 12: 'P',
                   13: '-LRB-', 14: 'FW', 15: 'W', 16: 'UH', 17: 'LS', 18: 'SYM'}
 
-    def __init__(self, feature_names):
+    def __init__(self, feature_names=[]):
         """
         Creates an instance of the FeatureEstimator class.
         :param feature_names: the features to calculate when running
@@ -60,7 +60,7 @@ class CustomFeatureEstimator:
                                                     + self.features[i]['name'])
                     try:
                         self.results[dependency] = \
-                            numpy.load(FEATURE_DIR + '/' + dependency + '.npy')
+                            numpy.load(FEATURE_DIR + dependency + '.npy')
                     except:
                         exit(-1)
                     print("A saved version of the former is loaded from a file")
@@ -72,6 +72,7 @@ class CustomFeatureEstimator:
         :return:
         """
         self.all_features = {
+            "POS": {"func": self.pos_tag_feature, "dep": []},
             "sent_syllab": {"func": self.sent_syllable_feature, "dep": []},
             "word_syllab": {"func": self.word_syllable_feature, "dep": []},
             "word_count": {"func": self.word_count_feature, "dep": []},
@@ -79,7 +80,6 @@ class CustomFeatureEstimator:
                                  "dep": []},
             "synset_count": {"func": self.synset_count_feature, "dep": []},
             "synonym_count": {"func": self.synonym_count_feature, "dep": []},
-            "POS": {"func": self.pos_tag_feature, "dep": []},
             "labels": {"func": self.get_labels, "dep": []},
             "wv": {"func": self.word_embeddings_feature, "dep": ["POS"]}
         }
@@ -100,8 +100,31 @@ class CustomFeatureEstimator:
         for feature in self.features:
             print("Assessing " + feature["name"])
             self.results[feature["name"]] = feature["func"](data)
-            numpy.save(FEATURE_DIR + '/' + feature["name"],
+            numpy.save(FEATURE_DIR + feature["name"],
                        numpy.array(self.results[feature["name"]]))
+        print('Done')
+
+    def load_features(self):
+        """
+        Simply loads all the specified features from corresponding files
+        :return: a numpy matrix
+        """
+        result = []
+        for feature in self.features:
+            if feature["name"] == "labels":
+                print("Labels will not be appended to the feature list."
+                      "\nUse load_labels to get the labels")
+                continue
+            result.append(numpy.load(FEATURE_DIR + feature["name"] + ".npy"))
+        result = numpy.concatenate(result, axis=1)
+        return result
+
+    def load_labels(self):
+        """
+        Load teh labels as a numpy array
+        :return:
+        """
+        return numpy.load(FEATURE_DIR + "labels.npy")
 
     def sent_syllable_feature(self, data):
         """
@@ -120,7 +143,8 @@ class CustomFeatureEstimator:
         ind = 0
         result = []
         for i in range(len(data)):
-            result.append(float(sum(output[ind: ind+n_of_words[i]])) / n_of_words[i])
+            value = float(sum(output[ind: ind+n_of_words[i]])) / n_of_words[i]
+            result.append(numpy.array([value]))
             ind += n_of_words[i]
         return result
 
@@ -161,7 +185,7 @@ class CustomFeatureEstimator:
         :param data: See the entry for calculate_features
         :return:
         """
-        return [len(line['sent'].split(' ')) for line in data]
+        return [numpy.array([len(line['sent'].split(' '))]) for line in data]
 
     def mean_word_length_feature(self, data):
         """
@@ -169,8 +193,8 @@ class CustomFeatureEstimator:
         :param data: See the entry for calculate_features
         :return:
         """
-        return [statistics.mean([len(x) for x in line['sent'].split(' ') if
-                          re.match('.*[^a-zA-Z].*', x)]) for line in data]
+        return [numpy.array([statistics.mean([len(x) for x in line['sent'].split(' ') if
+                          re.match('.*[^a-zA-Z].*', x)])]) for line in data]
 
     def synset_count_feature(self, data):
         """
@@ -229,9 +253,7 @@ class CustomFeatureEstimator:
                 self.tag_to_num[tag] = next_id
                 self.num_to_tag[next_id] = tag
                 next_id += 1
-            result.append(self.tag_to_num[tag])
-        print(self.tag_to_num)
-        print(self.num_to_tag)
+            result.append(numpy.array([self.tag_to_num[tag]]))
         return result
 
     def word_embeddings_feature(self, data):
@@ -244,13 +266,13 @@ class CustomFeatureEstimator:
         model = gensim.models.KeyedVectors.load_word2vec_format(EMB_MODEL,
                                                                 binary=True)
         for i in range(len(data)):
-            tag = self.num_to_tag[self.results['POS'][i]]
+            tag = self.num_to_tag[self.results['POS'][i][0]]
             target = data[i]['words'][0] + '_' + tag
             if target not in model.vocab:
                 result.append(numpy.zeros(EMB_SIZE))
             else:
                 result.append(model[target])
-            return result
+        return result
 
     def get_labels(self, data):
         """
@@ -259,6 +281,8 @@ class CustomFeatureEstimator:
         :return:
         """
         return [line['score'] for line in data]
+
+    # def get_n_gram_score
 
 
 def get_raw_data():
@@ -275,6 +299,11 @@ def get_raw_data():
 
 
 if __name__ == "__main__":
-    fe = CustomFeatureEstimator(["word_count", "sent_syllab"])
+    fe = CustomFeatureEstimator(["POS", "sent_syllab", "word_syllab",
+                                "word_count", "mean_word_length", "wv",
+                                "synset_count", "synonym_count", "labels"])
     # TODO: Average synsets and synonyms count and n-gram frequencies
     fe.calculate_features(get_raw_data())
+    features = fe.load_features()
+    labels = fe.load_labels()
+    print(len(labels) == len(features))
