@@ -72,8 +72,7 @@ class CustomFeatureEstimator:
         :return:
         """
         self.all_features = {
-            "sent_syllab": {"func": self.sent_syllable_feature,
-                            "dep": ["word_count"]},
+            "sent_syllab": {"func": self.sent_syllable_feature, "dep": []},
             "word_syllab": {"func": self.word_syllable_feature, "dep": []},
             "word_count": {"func": self.word_count_feature, "dep": []},
             "mean_word_length": {"func": self.mean_word_length_feature,
@@ -111,15 +110,18 @@ class CustomFeatureEstimator:
         :return:
         """
         input = []
+        n_of_words = []
         for line in data:
-            input += line['sent'].split(' ')
+            tmp = [x for x in line['sent'].split(' ') if
+                   re.match('.*[a-zA-Z].*', x)]
+            n_of_words.append(len(tmp))
+            input += tmp
         output = self.syllabify(input)
         ind = 0
         result = []
         for i in range(len(data)):
-            n_of_words = self.results['word_count'][i]  # N of words in sent
-            result.append(float(sum(output[ind: ind+n_of_words])) / n_of_words)
-            ind += n_of_words
+            result.append(float(sum(output[ind: ind+n_of_words[i]])) / n_of_words[i])
+            ind += n_of_words[i]
         return result
 
     def word_syllable_feature(self, data):
@@ -273,5 +275,6 @@ def get_raw_data():
 
 
 if __name__ == "__main__":
-    fe = CustomFeatureEstimator(["word_syllab", "word_count"])
+    fe = CustomFeatureEstimator(["word_count", "sent_syllab"])
+    # TODO: Average synsets and synonyms count and n-gram frequencies
     fe.calculate_features(get_raw_data())
