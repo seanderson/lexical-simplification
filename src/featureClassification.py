@@ -36,13 +36,13 @@ import generate_features
 import copy
 import random
 
-SCALE = True
+SCALE = False
 TESTCLASSIFY = False
 IMPORTDATA = False
 LINEAR_REG_TEST = False
 NNET = True
 KERAS = True
-GRIDSEARCH = False
+GRIDSEARCH = True
 DATA_TYPES = ['num', 'bi_num', 'bi_str', 'bi_arr']
 DATA_IN_TYPE = 'bi_num'
 DATA_USE_TYPE = 'bi_arr'
@@ -320,8 +320,8 @@ def five_fold_test(X, Y):
         else:
             intermediateType = DATA_USE_TYPE
         preds = convert_data(intermediateType,DATA_USE_TYPE, preds)
-        results[0] = np.append(results[0], preds)
-        results[1] = np.append(results[1], test[1])
+        results[0] = results[0] + preds
+        results[1] = results[1] + test[1]
     return results
 
 
@@ -494,4 +494,4 @@ if __name__ == '__main__':
         print('% categorically correct')
         print(a.calc_percent_categorically_right(processedData))
         print('(precision, recall, f_measure')
-        print(precision, recall, analyzer.Analyzer.calc_f_measure(precision, recall))
+        print(precision, recall, analyzer.calc_f_measure(precision, recall))

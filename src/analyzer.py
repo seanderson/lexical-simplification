@@ -76,12 +76,17 @@ class Analyzer:
         :return: a confusion matrix
         """
         if self.DATA_TYPE in Analyzer.BINARY_TYPES:
-            results = featureClassification.convert_data(self.DATA_TYPE,
-                                                         'bi_str', results)
+            results[0] = featureClassification.convert_data(self.DATA_TYPE,
+                                                         'bi_str', results[0])
+            results[1] = featureClassification.convert_data(self.DATA_TYPE,
+                                                            'bi_str',
+                                                            results[1])
             return process_results_bi_str(results)
         else:
-            results = featureClassification.convert_data(self.DATA_TYPES, 'num',
-                                                         results)
+            results[0] = featureClassification.convert_data(self.DATA_TYPES, 'num',
+                                                         results[0])
+            results[1] = featureClassification.convert_data(self.DATA_TYPES, 'num',
+                                                         results[1])
             return process_results_reg(results)
 
     def calc_avg_percent_right(self, pData):
@@ -104,12 +109,9 @@ class Analyzer:
         methods
         :return:
         """
-        if self.BIN_EVAL:
-            return float(len(pData[0]) + len(pData[2])) / \
-                   float(sum([len(pData[0]), len(pData[1]), len(pData[2]),
-                              len(pData[3])]))
-        else:
-            return 0
+        return float(len(pData[0]) + len(pData[2])) / \
+               float(sum([len(pData[0]), len(pData[1]), len(pData[2]),
+                          len(pData[3])]))
 
     def getScorer(self):
         """
