@@ -12,17 +12,21 @@ N_GRAM_DIRECTORY = "/home/nlp/corpora/n-grams/"
 ORIGINAL_DATA = paths.NEWSELA_ALIGNED + "dataset.txt"
 # the data in "Chris" format, i.e. a line with tab-separated values:
 # word  ind score   sentence    substituition (the latter is optional)
-FEATURE_DIR = paths.NEWSELA_ALIGNED + "features_alternative/"
+FEATURE_DIR = paths.NEWSELA_ALIGNED + "features_cwi/"
 # the directory to which all the numpy arrays will be stored
 EMB_MODEL = paths.NEWSELA_ALIGNED + "model.bin"
 # current model is trained with vectors of size 500, window = 5
 # alpha = 0.01, min_alpha = 1.0e-9, negative sampling = 5. The third epoch is
 # taken because it shows the best score on SimLex-999
 EMB_SIZE = 500
-N_ALTERNATIVES = 5
+N_ALTERNATIVES = 0
+# the number of substitution candidates to add (the substitutions are chosen
+# from the nearest word vecors that bear the same POS tag). This constant should
+# be zero, if the document in question contains phrases
 TOP_N = 20
-# the number of substitution candidates to add (teh substitutions are chosen
-# from the nearest word vecors that bear the same POS tag)
+# the number of most-similar words to grab when looking for alternatives
+# Out of these only those words will be added to alternatives that have the same
+# POS tag as the target word
 BINARY = lambda x: int(x)
 
 """
@@ -37,14 +41,17 @@ BINARY = lambda x: 0 if int(x) <= 3  else 1
 
 class CustomFeatureEstimator:
 
-    tag_to_num = {'A': 5, 'MD': 2, 'PDT': 9, 'RP': 8, 'IN': 6, '-RRB-': 7,
+    TAG_TO_NUM = {'A': 5, 'MD': 2, 'PDT': 9, 'RP': 8, 'IN': 6, '-RRB-': 7,
                   'CC': 11, 'LS': 17, 'J': 3, 'SYM': 18, 'N': 1, 'P': 12,
                   'UH': 16, 'W': 15, 'V': 19, '-LRB-': 13, 'DT': 10, 'CD': 4,
                   'FW': 14, 'PHRASE': 0}
-    num_to_tag = {0: 'PHRASE', 1: 'N', 2: 'MD', 3: 'J', 4: 'CD', 5: 'A',
+    NUM_TO_TAG = {0: 'PHRASE', 1: 'N', 2: 'MD', 3: 'J', 4: 'CD', 5: 'A',
                   6: 'IN', 7: '-RRB-', 8: 'RP', 9: 'PDT', 10: 'DT', 11: 'CC',
                   12: 'P', 13: '-LRB-', 14: 'FW', 15: 'W', 16: 'UH', 17: 'LS',
                   18: 'SYM', 19: 'V'}
+
+    VOWELS = ['a', 'e', 'i', 'o', 'u', 'y', 'A', 'E', 'I', 'O', 'U', 'Y']
+    VOWEL_REGEX = re.compile(r'[AEIOUYaeiouy]')
 
     def __init__(self, feature_names=[]):
         """
@@ -58,17 +65,22 @@ class CustomFeatureEstimator:
         self.features = [self.all_features[name] for name in feature_names]
         # self.features is an array of features that will be used during this
         # particular run
+
         if N_ALTERNATIVES > 0:
-            if feature_names[0] != 'wv' and (feature_names[1] != 'wv' or feature_names[0] != 'POS'):
+            if feature_names[0] != 'wv' and (
+                    feature_names[1] != 'wv' or feature_names[0] != 'POS'):
                 print('If alternatives are to be calculated, place POS and wv'
                       'in the beginning')
+                exit(0)
+
         for i in range(len(self.features)):
             for dependency in self.features[i]['dep']:
                 # some features require that another feature is executed
                 # beforehand (e.g. word vectors need to know the POS tags)
                 if dependency not in [x['name'] for x in self.features[:i]]:
-                    print("Feature " + dependency + " should come before feature "
-                                                    + self.features[i]['name'])
+                    print("Feature " + dependency +
+                          " should come before feature " +
+                          self.features[i]['name'])
                     try:
                         self.results[dependency] = \
                             numpy.load(FEATURE_DIR + dependency + '.npy')
@@ -99,6 +111,7 @@ class CustomFeatureEstimator:
             "3-gram": {"func": lambda x: self.n_gram_feature(x, 3), "dep": []},
             "4-gram": {"func": lambda x: self.n_gram_feature(x, 4), "dep": []},
             "5-gram": {"func": lambda x: self.n_gram_feature(x, 5), "dep": []},
+            "vowel_count": {"func": self.vowel_count_feature, "dep": []}
         }
         for key in self.all_features:
             self.all_features[key]["name"] = key
@@ -269,13 +282,13 @@ class CustomFeatureEstimator:
         """
         tags = get_tags(data)
         result = []
-        next_id = len(self.tag_to_num) + 1
+        next_id = len(self.TAG_TO_NUM) + 1
         for tag in tags:
-            if tag not in self.tag_to_num:
-                self.tag_to_num[tag] = next_id
-                self.num_to_tag[next_id] = tag
+            if tag not in self.TAG_TO_NUM:
+                self.TAG_TO_NUM[tag] = next_id
+                self.NUM_TO_TAG[next_id] = tag
                 next_id += 1
-            result.append(numpy.array([self.tag_to_num[tag]]))
+            result.append(numpy.array([self.TAG_TO_NUM[tag]]))
         return result
 
     def word_embeddings_feature(self, data):
@@ -292,7 +305,7 @@ class CustomFeatureEstimator:
             if data[i]['phrase']:
                 result.append(numpy.zeros(EMB_SIZE))
                 continue
-            tag = self.num_to_tag[self.results['POS'][i][0]]
+            tag = self.NUM_TO_TAG[self.results['POS'][i][0]]
             target = data[i]['words'][0] + '_' + tag
             result.append([])
             if target not in model.vocab:
@@ -360,7 +373,8 @@ class CustomFeatureEstimator:
                 id = line['inds'][j]
                 if id == -1 or id - n + 1 < 0:
                     continue
-                query = (' '.join(line['sent'].split(' ')[id - n + 1: id]) + ' ' + line['words'][j]).lstrip(' ')
+                query = (' '.join(line['sent'].split(' ')[id - n + 1: id]) + ' ' +
+                         re.sub('[^a-zA-Z0-9\- \t,.!@#%&\*\(\)\'\"`;:?/]', '', line['words'][j])).lstrip(' ')
                 query = re.sub('`', '\'', query)
                 if query not in dictionary:
                     dictionary[query] = []
@@ -411,20 +425,43 @@ class CustomFeatureEstimator:
             # result[i][j * 2 + 1] is the number of such lines
             if data[i]['hit'] is None:
                 continue
-            tokens = data[i]['words'] + [data[i]['phrase']]
+            tokens = [re.sub('[^a-z ]', '', x) for x in data[i]['words'] + data[i]['phrase']]
             # tokens for which the hit frequency is to be counted
+            newsent = False
             if data[i]['hit'] not in hits:
                 hits[data[i]['hit']] = [i]
             else:
+                sents = [data[lid]['sent'] for lid in hits[data[i]['hit']]]
+                if data[i]['sent'] not in sents:
+                    newsent = True
                 hits[data[i]['hit']].append(i)
+            sents = []
             for line_id in hits[data[i]['hit']]:
-                for j in range(len(tokens)):
-                    result[i][j * 2] += data[line_id]['sent'].count(tokens[j])
-                    result[i][j * 2 + 1] += 1
-                tmp = data[line_id]['words'] + [data[line_id]['phrase']]
+                if data[line_id]['sent'] not in sents:
+                    sents.append(data[line_id]['sent'])
+                    for j in range(len(tokens)):
+                        result[i][j * 2] += data[line_id]['sent'].count(tokens[j])
+                        result[i][j * 2 + 1] += len(data[line_id]['sent'].split(' '))
+                if not newsent or i == line_id:
+                    continue
+                tmp = [re.sub('[^a-z ]', '', x) for x in data[line_id]['words'] + data[line_id]['phrase']]
                 for j in range(len(tmp)):
                     result[line_id][j * 2] += data[i]['sent'].count(tmp[j])
-                    result[line_id][j * 2 + 1] += 1
+                    result[line_id][j * 2 + 1] += len(data[i]['sent'].split(' '))
+        return result
+
+    def vowel_count_feature(self, data):
+        """
+        Calculate the number of vowels in the target words/phrase
+        :param data:
+        :return:
+        """
+        result = []
+        for i in range(len(data)):
+            result.append(numpy.zeros(N_ALTERNATIVES + 1))
+            tokens = data[i]['words'] + data[i]['phrase']
+            for j in range(len(tokens)):
+                result[-1][j] = len(self.VOWEL_REGEX.findall(tokens[j]))
         return result
 
 
@@ -439,6 +476,13 @@ def get_raw_data():
     lines = [{'words': [x[0]], 'sent': x[3], 'inds': [int(x[1])],
               'score':BINARY(x[2]), 'phrase': [], 'hit': None,
               'subst': x[-1]} for x in lines]
+    if N_ALTERNATIVES > 0:
+        with open("/home/nlp/corpora/newsela_aligned/features_alternative/substitutions") as file:
+            subst = [x.rstrip('\n').split('\t')[:5] for x in file.readlines()]
+        for i in range(len(subst)):
+            for s in subst[i]:
+                lines[i]['words'].append(s)
+                lines[i]['inds'].append(lines[i]['inds'][0])
     return lines
 
 
@@ -449,45 +493,45 @@ def get_cwi_data():
     """
     with open(CWI_DATA) as file:
         lines = file.readlines()
-    lines = [line.rstrip('\n').split('\t') for line in lines]
+    lines = [line.rstrip('\n').lower().split('\t') for line in lines]
     for i in range(len(lines)):
         if len(lines[i][4].split(' ')) > 1:
             # the target is a phrase
             ind1 = int(len(lines[i][1][:int(lines[i][2])].split(' ')))
             ind2 = int(len(lines[i][1][:int(lines[i][3])].split(' ')))
-            lines[i] = {'phrase': lines[i][4], 'words': [], 'hit': lines[i][0],
-                        'sent': lines[i][1], 'score': int(lines[i][9]),
+            lines[i] = {'phrase': [lines[i][4]], 'words': [], 'hit': lines[i][0],
+                        'sent': re.sub('[^a-z ]', '', lines[i][1]),
+                        'score': int(lines[i][9]),
                         'inds': [], 'phrase_ind': [ind1, ind2]}
         else:
             # the target is a word
             ind = int(len(lines[i][1][:int(lines[i][2])].split(' ')))
-            lines[i] = {'words': [lines[i][4]], 'phrase': None,
-                        'hit': lines[i][0], 'sent': lines[i][1],
+            lines[i] = {'words': [lines[i][4]], 'phrase': [],
+                        'hit': lines[i][0],
+                        'sent': re.sub('[^a-z ]', '', lines[i][1]),
                         'score': int(lines[i][9]), 'inds': [ind],
                         'phrase_ind': []}
     return lines
 
 
 if __name__ == "__main__":
-    fe = CustomFeatureEstimator(["wv", "hit", "sent_syllab", "word_syllab",
-                                "word_count", "mean_word_length",
-                                "synset_count", "synonym_count", "labels",
-                                 "1-gram", "2-gram", "3-gram", "4-gram",
-                                 "5-gram"])
-    # fe = CustomFeatureEstimator(["1-gram", "word_count"])
-    # TODO: Average synsets and synonyms count and n-gram frequencies
-    fe.calculate_features(get_raw_data())
-    exit(0)
+    fe = CustomFeatureEstimator(["hit", "vowel_count", "labels"])
+    fe.calculate_features(get_cwi_data())
     features = fe.load_features()
     labels = fe.load_labels()
-    data = get_raw_data()
+    data = get_cwi_data()
     if len(data) != len(features):
         exit(-1)
     for i in range(len(data)):
         line = data[i]
         print('\n')
-        print(line['sent'] + '\t' + str(line['words']) + '\t' + str(line['phrase']))
-        # print("POS: " + CustomFeatureEstimator.num_to_tag[features[i][0]])
+        print(line['sent'] + '\t' + str(line['words']) + '\t' +
+              str(line['phrase']))
+        print("hit: " + str(features[i][0:2]))
+        print("vowel_count: " + str(features[i][2]))
+        print("label: " + str(labels[i]))
+        """
+        print("POS: " + CustomFeatureEstimator.num_to_tag[features[i][0]])
         print("hit: " + str(features[i][1:13]))
         print("sent_syllab: " + str(features[i][13]))
         print("word_syllab: " + str(features[i][14:20]))
@@ -497,9 +541,10 @@ if __name__ == "__main__":
         print("synonym_count: " + str(features[i][28:34]))
         print("1-gram: " + str(features[i][34:40]))
         print("2-gram: " + str(features[i][40:46]))
-        # print("3-gram: " + str(features[i][46:52]))
-        # print("4-gram: " + str(features[i][52:58]))
-        # print("5-gram: " + str(features[i][58:64]))
+        print("3-gram: " + str(features[i][46:52]))
+        print("4-gram: " + str(features[i][52:58]))
+        print("5-gram: " + str(features[i][58:64]))
         print("cosines: " + str(features[i][-5:]))
-        # print("wv: " + str(features[i][64:3064]))
+        print("wv: " + str(features[i][64:3064]))
         print("label: " + str(labels[i]))
+        """
