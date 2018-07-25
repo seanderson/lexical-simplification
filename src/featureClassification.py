@@ -13,6 +13,7 @@ from keras.optimizers import adam
 from keras import backend as K
 from keras import optimizers
 from keras.callbacks import EarlyStopping
+import keras.initializers
 from keras.models import Sequential
 from keras.layers.core import Activation
 from keras.layers.core import Dense
@@ -42,7 +43,7 @@ IMPORTDATA = False
 LINEAR_REG_TEST = False
 NNET = True
 KERAS = True
-GRIDSEARCH = True
+GRIDSEARCH = False
 DATA_TYPES = ['num', 'bi_num', 'bi_str', 'bi_arr']
 DATA_IN_TYPE = 'bi_num'
 DATA_USE_TYPE = 'bi_arr'
@@ -298,10 +299,10 @@ def five_fold_test(X, Y):
             else:
                 earlyStopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=2, verbose=1, mode='auto')
                 callbacks = [earlyStopping]
-                callbacks = None
+                #callbacks = None
                 train[0] = np.array(train[0])
                 train[1] = np.array(train[1])
-                clf = keras_NN(len(train[0][0]),(3000, 1500, 750),.1)
+                clf = keras_NN(len(train[0][0]),(3000, 1500, 750),.00001)
                 clf.fit(train[0], train[1], epochs=50, batch_size=128, verbose=2, validation_split=.01, callbacks=callbacks,shuffle=True)
                 preds = clf.predict(test[0])
         else:
@@ -325,6 +326,46 @@ def five_fold_test(X, Y):
     return results
 
 
+def test_of_a_test(X, Y):
+    earlyStopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=2, verbose=1, mode='auto')
+    callbacks = [earlyStopping]
+    #callbacks = None
+    evaluator = KerasClassifier(build_fn=keras_NN, inDim=len(X[0]), epochs=50, verbose=2)
+    scorer = make_scorer(a.getScorer(), labels=['c'], average=None)
+    params = {'callbacks':callbacks,'validation_split':.01}
+    scores = cross_val_score(evaluator,X,Y,scoring=scorer, cv=2, verbose=2, fit_params=params)
+    return scores
+
+
+def please_work(X,Y):
+    temp = list(zip(X, Y))
+    random.shuffle(temp)
+    X, Y = zip(*temp)
+    per = int(len(X)*.60)
+    X = numpy.asarray(X)
+    Y = numpy.asarray(Y)
+    train = [X[:per],Y[:per]]
+    test = [X[per:],Y[per:]]
+    clf = keras_NN(inDim=len(train[0][0]), hiddenShape=(3000, 1500, 750), learningRate=.00001)
+    callbacks = [EarlyStopping(monitor='val_loss', min_delta=0, patience=2, verbose=1, mode='auto')]
+    #callbacks = None
+    clf.fit(train[0], train[1], epochs=50, batch_size=128, verbose=2, validation_split=.1, callbacks=callbacks, shuffle=False)
+    preds = clf.predict(test[0])
+    if DATA_USE_TYPE == 'bi_arr':
+        preds = map(prob_arr_to_str, preds)
+        intermediateType = 'bi_str'
+    elif DATA_USE_TYPE == 'num':
+        preds = map(prob_num_to_num, preds)
+        intermediateType = 'num'
+    elif DATA_USE_TYPE == 'bi_num':
+        preds = map(prob_bi_num_to_str, preds)
+        intermediateType = 'bi_str'
+    else:
+        intermediateType = DATA_USE_TYPE
+    preds = convert_data(intermediateType, DATA_USE_TYPE, preds)
+    return [preds, test[1]]
+
+
 def classify(data):
     """
     trains a SVM on data
@@ -337,14 +378,17 @@ def classify(data):
     return clf
 
 
-def keras_NN(inDim, hiddenShape = (10,),learningRate = .001):
+def keras_NN(inDim, hiddenShape = (10,),learningRate = .0001):
     adam = optimizers.adam(lr= learningRate)
     model = Sequential()
+    bInitializer = keras.initializers.RandomUniform()
+    bInitializer = keras.initializers.Zeros()
+    kInitializer = keras.initializers.VarianceScaling(scale=1.0, mode='fan_in',distribution='normal')
     for layer in range(len(hiddenShape)):
         if layer == 0:
-            model.add(Dense(hiddenShape[layer], input_dim=inDim, kernel_initializer="uniform", activation="tanh"))
+            model.add(Dense(hiddenShape[layer], input_dim=inDim, bias_initializer=bInitializer, kernel_initializer=kInitializer, activation="tanh"))
         else:
-            model.add(Dense(hiddenShape[layer], kernel_initializer="uniform", activation="tanh"))
+            model.add(Dense(hiddenShape[layer], kernel_initializer=kInitializer, bias_initializer=bInitializer, activation="tanh"))
     model.add(Dense(2))
     model.add(Activation("softmax"))
     print('Making network')
@@ -466,7 +510,9 @@ if __name__ == '__main__':
             print(analyzeScores(scores))
             print(str(bestScore))
             print(bestEst)
+        print(test_of_a_test(featureData, complexScores))
         rawDat = five_fold_test(featureData, complexScores)
+        #rawDat = please_work(featureData, complexScores)
         featureData = None
         complexScores = None
         if ALL_COMPLEX:

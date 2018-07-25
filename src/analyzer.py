@@ -38,19 +38,6 @@ class Analyzer:
             return
         print('ERROR: unrecognized data_type')
 
-    def calc_num_in_categories(l):
-        """
-        counts frequesncy of occurrence in a list of ints
-        :param l: list of ints
-        :return: list of occurrence where l[i] = index
-        """
-        categories = []
-        for num in l:
-            while len(categories) < num:
-                categories.append(0)
-            categories[num] += 1
-        return categories
-
     def calc_percent_right(processedDataCategory):
         """
         calculates the % right from a list [predicted category, actual category]
@@ -125,6 +112,20 @@ class Analyzer:
                 return scorers[i]
         print('ERROR: scorer not found')
         return None
+
+
+def calc_num_in_categories(l):
+    """
+    counts frequesncy of occurrence in a list of ints
+    :param l: list of ints
+    :return: list of occurrence where l[i] = index
+    """
+    categories = []
+    for num in l:
+        while len(categories) < num:
+            categories.append(0)
+        categories[num] += 1
+    return categories
 
 
 def process_results_reg(results):
