@@ -31,9 +31,11 @@ def load_dataset(num):
     gf.FEATURE_DIR = paths.CWI + feature_file + "/"
     print("loading",gf.FEATURE_DIR+feature_file)
     fe = gf.CustomFeatureEstimator([
-        "labels",
-        "word_length","vowel_count","word_syllab",
-        "hit" ,"SEW_freq" , "5-gram"
+        "word_syllab", "sent_syllab", "POS", "hit",
+                                 "word_count", "mean_word_length", "synset_count",
+                                 "synonym_count", "vowel_count", "1-gram",
+                                 "2-gram", "lexicon",
+                                 "wv", "labels"
     ])
     features = fe.load_features()
     labels = fe.load_labels()
