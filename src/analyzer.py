@@ -231,7 +231,7 @@ def reg_scorer(y, y_pred, **kwargs):
     :return: the f score
     """
     data = process_results_reg([y_pred, y])
-    precision = calc_recall(data)
+    precision = calc_precision(data)
     recall = calc_recall(data)
     return calc_f_measure(precision, recall)
 
@@ -245,7 +245,7 @@ def bi_str_scorer(y, y_pred, **kwargs):
     :return: the f score
     """
     data = process_results_bi_str([y_pred, y])
-    precision = calc_recall(data)
+    precision = calc_precision(data)
     recall = calc_recall(data)
     return calc_f_measure(precision, recall)
 
@@ -261,7 +261,7 @@ def bi_num_scorer(y, y_pred, **kwargs):
     y = featureClassification.convert_data('bi_num', 'bi_str', y)
     y_pred = featureClassification.convert_data('bi_num', 'bi_str', y_pred)
     data = process_results_bi_str([y_pred, y])
-    precision = calc_recall(data)
+    precision = calc_precision(data)
     recall = calc_recall(data)
     return calc_f_measure(precision, recall)
 
@@ -277,7 +277,7 @@ def bi_arr_scorer(y, y_pred, **kwargs):
     y = featureClassification.convert_data('bi_arr', 'bi_str', y)
     y_pred = featureClassification.convert_data('bi_num', 'bi_str', y_pred)
     data = process_results_bi_str([y_pred, y])
-    precision = calc_recall(data)
+    precision = calc_precision(data)
     recall = calc_recall(data)
     return calc_f_measure(precision, recall)
 

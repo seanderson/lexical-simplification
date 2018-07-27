@@ -13,6 +13,7 @@ from keras.optimizers import adam
 from keras import backend as K
 from keras import optimizers
 from keras.callbacks import EarlyStopping
+from keras.callbacks import ModelCheckpoint
 import keras.initializers
 from keras.models import Sequential
 from keras.layers.core import Activation
@@ -52,9 +53,11 @@ REMOVE_ZEROS = False
 UNIQUE_ONLY = False
 DEBUG = False
 
-WORD_ONLY_CONFIG = ["POS","word_syllab","wv","synset_count", "synonym_count"]
+WORD_ONLY_CONFIG = ["POS","word_syllab","wv","synset_count", "synonym_count", "lexicon"]
 CONTEXT_ONLY_CONFIG = ["sent_syllab","word_count","mean_word_length"]
-ALL_FEATURES_CONFIG = ["POS", "sent_syllab", "word_syllab", "word_count", "mean_word_length", "wv", "synset_count", "synonym_count", "labels"]
+ALL_FEATURES_CONFIG = ["POS", "sent_syllab", "word_syllab", "word_count", "mean_word_length",
+                       "wv", "synset_count", "synonym_count", "vowel_count", "1-gram", "2-gram",
+                       "3-gram","4-gram","5-gram","hit","labels", "lexicon"]
 ONLY_VECS = ["wv"]
 DENSITY_ONLY = [False, False, False, False, False, False, True, False, False, False, False, False, False]
 CURRENT_CONFIG = ALL_FEATURES_CONFIG
@@ -113,6 +116,16 @@ def convert_data(fromType, toType, data):
     else:
         print('PROBLEM CONVERTING DATA: no converter set up for fromType ' + fromType)
     return data
+
+
+def remove_zeros(X,Y):
+    tempX = []
+    tempY = []
+    for labelInd in range(len(Y)):
+        if not (Y[labelInd] == 0 or Y[labelInd] == '0'):
+            tempX.append(Y[labelInd])
+            tempY.append(X[labelInd])
+    return tempX,tempY
 
 
 def num_to_bi_num(item):
@@ -185,6 +198,8 @@ def bi_arr_to_bi_num(arr):
 
 
 def bi_arr_to_str(arr):
+    if len(list(arr)) != 2:
+        print('PROBLEM: arr not [0,1] or [1,0]')
     if arr[0] == 1:
         return 'c'
     elif arr[1] == 1:
@@ -265,12 +280,17 @@ def five_fold_test(X, Y):
     available = [tempX, list(tempY)]
     # print(calc_num_in_categories(available[1]))
 
+    temp = None
+    tempX = None
+    tempY = None
     # split into fifths
     n = len(available[0]) / numTimesToTest
     fifths = [[[],[]], [[],[]], [[],[]], [[],[]], [[],[]]]
     for i in range(numTimesToTest):
         fifths[i][0] = available[0][n*i:n*(i+1)]
         fifths[i][1] = available[1][n*i:n*(i+1)]
+
+    available = None
 
     for i in range(numTimesToTest):
         print("Testing: " + str(i+1) + " Out of " + str(numTimesToTest))
@@ -282,6 +302,7 @@ def five_fold_test(X, Y):
                 train[1] += fifths[j][1]
         # standardize feature data
         if not SCALE:
+            z = 0
             train = [np.asarray(train[0]).astype(np.float),train[1]]
             test = [np.asarray(test[0]).astype(np.float), test[1]]
         else:
@@ -327,13 +348,19 @@ def five_fold_test(X, Y):
 
 
 def test_of_a_test(X, Y):
+    shape = (4000,)
+    with open('networks/shape.txt','w') as file:
+        file.write(str(shape)+'\n'+str(len(X[0])))
+    #path = 'networks/saved-network-{epoch:02d}-{val_loss:.2f}.hdf5'
+    path = 'networks/saved-network.hdf5'
     earlyStopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=2, verbose=1, mode='auto')
-    callbacks = [earlyStopping]
+    checkpoint = ModelCheckpoint(filepath=path, monitor='val_loss',verbose=1,save_best_only=True)
+    callbacks = [earlyStopping, checkpoint]
     #callbacks = None
-    evaluator = KerasClassifier(build_fn=keras_NN, inDim=len(X[0]), epochs=50, verbose=2)
-    scorer = make_scorer(a.getScorer(), labels=['c'], average=None)
+    evaluator = KerasClassifier(build_fn=keras_NN, inDim=len(X[0]), hiddenShape=(4000,), epochs=50, verbose=2)
+    scorer = make_scorer(analyzer.custom_f1_scorer, labels=['c'], average=None)
     params = {'callbacks':callbacks,'validation_split':.01}
-    scores = cross_val_score(evaluator,X,Y,scoring=scorer, cv=2, verbose=2, fit_params=params)
+    scores = cross_val_score(evaluator,X,Y,scoring=scorer, cv=5, verbose=3, fit_params=params)
     return scores
 
 
@@ -364,6 +391,32 @@ def please_work(X,Y):
         intermediateType = DATA_USE_TYPE
     preds = convert_data(intermediateType, DATA_USE_TYPE, preds)
     return [preds, test[1]]
+
+
+def please_work_sk(X, Y):
+    temp = list(zip(X, Y))
+    random.shuffle(temp)
+    X, Y = zip(*temp)
+    per = int(len(X) * .60)
+    X = numpy.asarray(X)
+    Y = numpy.asarray(Y)
+    train = [X[:per], Y[:per]]
+    test = [X[per:], Y[per:]]
+    earlyStopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=2,
+                                  verbose=1, mode='auto')
+    callbacks = [earlyStopping]
+    # callbacks = None
+    evaluator = KerasClassifier(build_fn=keras_NN, inDim=len(X[0]), epochs=50,
+                                verbose=2)
+    evaluator.fit(train[0],train[1],callbacks=callbacks,validation_split=.1)
+    preds = evaluator.predict(test[0])
+    for i in range(len(preds)):
+        if preds[i] == 1:
+            preds[i] = 0
+        else:
+            preds[i] = 1
+    preds = convert_data('bi_num','bi_arr',preds)
+    return [preds,test[1]]
 
 
 def classify(data):
@@ -412,6 +465,11 @@ def grid_search(X, Y, cutoff=-1):
             X = X[:cutoff]
             Y = Y[:cutoff]
     a = analyzer.Analyzer(DATA_USE_TYPE)
+    if SCALE:
+        scaler = preprocessing.StandardScaler()
+        X = scaler.fit_transform(X)
+    else:
+        X = numpy.asarray(X)
     if NNET:
         if not KERAS:
             # hiddenLayerSizes = [(60,),(40,),(20,),(15,),(10,),(5,),(1,)]
@@ -425,19 +483,28 @@ def grid_search(X, Y, cutoff=-1):
                 parameters = {'hidden_layer_sizes': [(20,), (10,)]}
             evaluator = MLPClassifier()
             scorer = make_scorer(a.getScorer(), labels=['c'], average=None)
+            clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3,
+                               n_jobs=1, cv=folds)
+            clf.fit(X, Y)
         else:
+            earlyStopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=2, verbose=1, mode='auto')
+            callbacks = [earlyStopping]
             inDim = [len(X[0])]
             shapes = [(10,),(30,),(50,),(70,),(90,),(110,),(130,),(150,)]
             s = [(3000,),(4000,),(5000,)]
             shapes2L = [(1,1,),(100,50,),(500,250,),(1000,500,),(1500,750,),(2000,1000,),(2500,1250,),(3000,1500,),(4000,2000,),(5000,2500,)]
             shapes3L = [(1,1,1,),(100,50,25,),(500,250,125,),(1000,500,125,),(1500,750,375,),(2000,1000,500,),(2500,1250,625,),(3000,1500,750,),(4000,2000,1000,),(5000,2500,1250,)]
             shapes_weird_but_good = [(10,30,50,70,110,130,150)]
-            lrs = [.001]
+            lrs = [.00001]
             parameters = {'inDim':inDim,'hiddenShape':s,'learningRate':lrs}
             evaluator = KerasClassifier(build_fn=keras_NN, epochs=100,verbose=2)
             scorer = make_scorer(a.getScorer(), labels=['c'], average=None)
+            clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3,
+                               n_jobs=1, cv=folds)
+            clf.fit(X, Y, callbacks=callbacks, validation_split=.1)
+
     else:
-        #parameters = {'kernel': ['rbf'], 'C': [.01, .1, 1, 10, 100, 1000],
+        # parameters = {'kernel': ['rbf'], 'C': [.01, .1, 1, 10, 100, 1000],
         #              'gamma': [.001,.01,.1,1,10,100,1000]}
         parameters = {'kernel': ['rbf'], 'C': [800, 900, 1000, 1100, 1200],
             'gamma': [.01, .5, 1, 5, 10]}
@@ -445,13 +512,9 @@ def grid_search(X, Y, cutoff=-1):
             parameters = {'kernel': ['rbf'], 'C': [1, 10], 'gamma': [1, 10], 'early_stopping': [True]}
         evaluator = svm.SVC()
         scorer = make_scorer(a.getScorer(), labels=['c'], average=None)
-    if SCALE:
-        scaler = preprocessing.StandardScaler()
-        X = scaler.fit_transform(X)
-    else:
-        X = numpy.asarray(X)
-    clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3, n_jobs=1, cv=folds)
-    clf.fit(X,Y)
+        clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3,
+                           n_jobs=1, cv=folds)
+        clf.fit(X, Y)
     scores = clf.cv_results_
     return clf.best_score_, clf.best_estimator_.get_params(), scores
 
@@ -462,7 +525,77 @@ def analyzeScores(scores):
     return scoresMean
 
 
+def test_over_multiple_feature_sets(featureSets, trainPath, testPath):
+    a = analyzer.Analyzer(DATA_USE_TYPE)
+    for i in range(len(featureSets)):
+        featSet = featureSets[i]
+        print('testing '+str(i)+' of '+str(len(featureSets))+': '+str(featSet))
+        fe = generate_features.CustomFeatureEstimator(featSet,trainPath)
+        featureData = fe.load_features()
+        complexScores = fe.load_labels()
+        if UNIQUE_ONLY:
+            featureData, complexScores = dataLoader.remove_duplicates(featureData,complexScores)
+        if REMOVE_ZEROS:
+            tempX = []
+            tempY = []
+            for labelInd in range(len(complexScores)):
+                if not (complexScores[labelInd] == 0 or complexScores[labelInd] == '0'):
+                    tempX.append(complexScores[labelInd])
+                    tempY.append(featureData[labelInd])
+            featureData = tempY
+            complexScores = tempX
+        if DATA_IN_TYPE != DATA_USE_TYPE:
+            complexScores = convert_data(DATA_IN_TYPE,DATA_USE_TYPE, complexScores)
+        if NNET:
+            rawDat = test_of_a_test(featureData, complexScores)
+        else:
+            rawDat = five_fold_test(featureData, complexScores)
+        with open('networks/shape.txt') as file:
+            shapeAndInDim = file.readlines()
+            shape = tuple(shapeAndInDim[0])
+            inDim = int(shapeAndInDim[1])
+        model = keras.models.load_model('networks/saved-network.hdf5')
+        fe = generate_features.CustomFeatureEstimator(featSet, testPath)
+        featureData = fe.load_features()
+        complexScores = fe.load_labels()
+        preds = model.predict(featureData)
+        result = analyzer.custom_f1_scorer(complexScores,preds)
+        return result
+
+
+def grid_search_over_multiple_feature_sets(featureSets):
+    a = analyzer.Analyzer(DATA_USE_TYPE)
+    scorer = a.getScorer()
+    scores = {}
+    for i in range(len(featureSets)):
+        featSet = featureSets[i]
+        print('testing ' + str(i) + ' of ' + str(len(featureSets)) + ': ' + str(featSet))
+        fe = generate_features.CustomFeatureEstimator(featSet)
+        featureData = fe.load_features()
+        complexScores = fe.load_labels()
+        if UNIQUE_ONLY:
+            featureData, complexScores = dataLoader.remove_duplicates(
+                featureData, complexScores)
+        if REMOVE_ZEROS:
+            tempX = []
+            tempY = []
+            for labelInd in range(len(complexScores)):
+                if not (complexScores[labelInd] == 0 or complexScores[labelInd] == '0'):
+                    tempX.append(complexScores[labelInd])
+                    tempY.append(featureData[labelInd])
+            featureData = tempY
+            complexScores = tempX
+        if DATA_IN_TYPE != DATA_USE_TYPE:
+            complexScores = convert_data(DATA_IN_TYPE, DATA_USE_TYPE,
+                                         complexScores)
+        grid_search(featureData,complexScores,cutoff=-1)
+        score = scorer(rawDat)
+        scores[i] = [featSet, score]
+    return scores
+
+
 if __name__ == '__main__':
+    print(test_over_multiple_feature_sets([ALL_FEATURES_CONFIG],))
     a = analyzer.Analyzer(DATA_USE_TYPE)
     if TESTCLASSIFY:
         iris = datasets.load_iris()
@@ -489,30 +622,24 @@ if __name__ == '__main__':
     if not TESTCLASSIFY or LINEAR_REG_TEST:
         fe = generate_features.CustomFeatureEstimator(["POS", "sent_syllab", "word_syllab",
                                      "word_count", "mean_word_length", "wv",
-                                     "synset_count", "synonym_count", "labels"])
+                                     "synset_count", "synonym_count", "labels"],generate_features.FEATURE_DIR)
         featureData = fe.load_features()
         complexScores = fe.load_labels()
         if UNIQUE_ONLY:
             featureData, complexScores = dataLoader.remove_duplicates(featureData,complexScores)
         if REMOVE_ZEROS:
-            tempX = []
-            tempY = []
-            for labelInd in range(len(complexScores)):
-                if not (complexScores[labelInd] == 0 or complexScores[labelInd] == '0'):
-                    tempX.append(complexScores[labelInd])
-                    tempY.append(featureData[labelInd])
-            featureData = tempY
-            complexScores = tempX
+            featureData, complexScores = remove_zeros(featureData, complexScores)
         if DATA_IN_TYPE != DATA_USE_TYPE:
             complexScores = convert_data(DATA_IN_TYPE,DATA_USE_TYPE, complexScores)
         if GRIDSEARCH:
-            bestScore, bestEst, scores = grid_search(featureData,complexScores,cutoff=10000)
+            bestScore, bestEst, scores = grid_search(featureData,complexScores,cutoff=30000)
             print(analyzeScores(scores))
             print(str(bestScore))
             print(bestEst)
         print(test_of_a_test(featureData, complexScores))
         rawDat = five_fold_test(featureData, complexScores)
         #rawDat = please_work(featureData, complexScores)
+        #rawDat = please_work_sk(featureData, complexScores)
         featureData = None
         complexScores = None
         if ALL_COMPLEX:
@@ -539,5 +666,8 @@ if __name__ == '__main__':
         print([len(category) for category in processedData])
         print('% categorically correct')
         print(a.calc_percent_categorically_right(processedData))
-        print('(precision, recall, f_measure')
+        print('(precision, recall, f_measure)')
         print(precision, recall, analyzer.calc_f_measure(precision, recall))
+        # sc = a.getScorer()
+        # rawDat[0] = convert_data('bi_arr','bi_num',rawDat[0])
+        # print(sc(rawDat[1],rawDat[0]))
