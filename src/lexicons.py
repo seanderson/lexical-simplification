@@ -1,8 +1,8 @@
 import sys
 import numpy
+from lexenstein.util import *
 
-
-UTAG_MAP = {  # map used when building a language model
+"""UTAG_MAP = {  # map used when building a language model
     'vb': 'v', 'vbd': 'v', 'vbg': 'v', 'vbn': 'v', 'vbp': 'v', 'vbz': 'v',
     'nn': 'n', 'nns': 'n', 'nnp': 'np', 'nnps': 'np',
     'jj': 'j', 'jjr': 'j', 'jjs': 'j',
@@ -12,8 +12,9 @@ UTAG_MAP = {  # map used when building a language model
     'prp$': 'prp$', 'rp': 'rp', 'sym': 'sym', 'to': 'to', 'uh': 'uh',
     'wdt': 'wdt', 'wp': 'wp', 'wp$': 'wp$', 'wrb': 'wrb', '.': '.', '``': '``',
     '\'\'': '\'\''
-}
-# TODO: Check whether R should be used instead of RB
+}"""
+
+UTAG_MAP = lambda x: getGeneralisedPOS(x)
 ANY_POS = ""  # for storing information about any POS
 n_unique_words = 0
 n_unique_entries = 0
@@ -36,16 +37,17 @@ def build_ultimate_lexicon(ul, lexicon, n_of_lexicons, l_id, l_name):
             print("Lexicon: " + l_name + ", line: " + str(i))
             print("Too many values to unpack: " + lexicon[i])
             exit(-1)
-        word, tag = [x.casefold() for x in lexicon[i].rstrip('\n').split('\t')]
-        if tag not in UTAG_MAP:
-            print("Lexicon: " + l_name + ", line: " + str(i))
-            print("Word " + word + " is marked with an unknown POS tag: " + tag)
-            exit(-1)
+        word, tag = lexicon[i].rstrip('\n').split('\t')
+        word = word.lower()
+        # if tag not in UTAG_MAP:
+            # print("Lexicon: " + l_name + ", line: " + str(i))
+            # print("Word " + word + " is marked with an unknown POS tag: " + tag)
+            # exit(-1)
         if word not in ul:
             n_unique_words += 1
             ul[word] = {}
             ul[word][ANY_POS] = numpy.zeros(n_of_lexicons)
-        tag = UTAG_MAP[tag]
+        tag = UTAG_MAP(tag)
         if tag not in ul[word]:
             n_unique_entries += 1
             ul[word][tag] = numpy.zeros(n_of_lexicons)
@@ -65,8 +67,11 @@ def write_ultimate_lexicon(ul, filename, lex_names):
         file.write('Word' + '\t' + '\t'.join(lex_names))
         for word in sorted(ul.keys()):
             for tag in ul[word].keys():
-                file.write('\n' + word + '_' + tag + '\t' +
-                           '\t'.join([str(x) for x in ul[word][tag].tolist()]))
+                if tag != "":
+                    file.write('\n' + word + '_' + tag + '\t' +
+                               '\t'.join([str(x) for x in ul[word][tag].tolist()]))
+                else:
+                    file.write('\n' + word + '\t' + '\t'.join([str(x) for x in ul[word][tag].tolist()]))
 
 
 def load_ultimate_lexicons(filename):
@@ -94,7 +99,7 @@ def get_word_features(word, ul):
     :param ul:
     :return: A numpy array of size get_n_of_features containing 1s and 0s
     """
-    word = word.casefold().split('_')
+    word = word.lower().split('_')
     tag = word[-1]
     word = '_'.join(word[:-1]) + '_'
     if word in ul:

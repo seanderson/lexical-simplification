@@ -411,17 +411,17 @@ def output_alignments(file, sentpairs, slug, all_alignments, debug=False):
             print(alignment.sent0.split(' ')[complex_only[0][1]] + '\t' + str(complex_only[0][1]) + '\t' + alignment.sent0.rstrip('\n'))
             print(alignment.sent1.split(' ')[simple_only[0][1]] + '\t' + str(simple_only[0][1]) + '\t' + alignment.sent1.rstrip('\n') + "\n")
             pass
-        file.write(slug + "\t" + str(alignment.ind0) + "\t" + str(
-                alignment.ind1) + "\n")
-        file.write(alignment.sent0.split(' ')[complex_only[0][1]] + '\t' + str(complex_only[0][1]) + '\t' + alignment.sent0.rstrip('\n') + "\n")
-        file.write(alignment.sent1.split(' ')[simple_only[0][1]] + '\t' + str(simple_only[0][1]) + '\t' + alignment.sent1.rstrip('\n') + "\n\n")
+        # file.write(slug + "\t" + str(alignment.ind0) + "\t" + str(
+                # alignment.ind1) + "\n")
+        # file.write(alignment.sent0.split(' ')[complex_only[0][1]] + '\t' + str(complex_only[0][1]) + '\t' + alignment.sent0.rstrip('\n') + "\n")
+        # file.write(alignment.sent1.split(' ')[simple_only[0][1]] + '\t' + str(simple_only[0][1]) + '\t' + alignment.sent1.rstrip('\n') + "\n\n")
         als.append((alignment.ind0, alignment.ind1))
-        """file.write(alignment.sent0.split(' ')[complex_only[0][1]] + '\t' + str(
-            complex_only[0][1]) + '\t1\t' + alignment.sent0.rstrip('\n') + "\t" + slug + "\t" + str(alignment.ind0) + "\n")
+        file.write(alignment.sent0.split(' ')[complex_only[0][1]] + '\t' + str(
+            complex_only[0][1]) + '\t1\t' + alignment.sent0.rstrip('\n') + "\t" + slug + "\t" + str(alignment.ind0) + "\t" + alignment.sent1.split(' ')[simple_only[0][1]] + '\n')
         complex = [x for x in complex if x[1] != complex_only[0][1]]
         complex = [x for x in complex if x[0].lower() not in STOPWORDS and re.match('.*[a-zA-Z].*', x[0]) and x[2] != "NNP"]
         for other in complex:
-            file.write(alignment.sent0.split(' ')[other[1]] + '\t' + str(other[1]) + '\t0\t' + alignment.sent0.rstrip('\n') + "\t" + slug + "\t" + str(alignment.ind0) + "\n")"""
+            file.write(alignment.sent0.split(' ')[other[1]] + '\t' + str(other[1]) + '\t0\t' + alignment.sent0.rstrip('\n') + "\t" + slug + "\t" + str(alignment.ind0) + '\t' + alignment.sent0.split(' ')[other[1]] + "\n")
     count = count_max_yield(als)
     if len(als) != count:
         print("Out of " + str(len(als)) + " alignments only " + str(count) + " would have been possible")

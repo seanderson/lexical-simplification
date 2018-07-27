@@ -13,7 +13,7 @@ import re
 
 
 CHRIS_DATA = "/home/nlp/corpora/newsela_aligned/dataset.txt"
-MODEL_FILE = "/home/nlp/newsela/src/nn/cbow-2018-Jul-05-1256/epoch0.model"
+MODEL_FILE = "/home/nlp/corpora/newsela_aligned/epoch3.model"
 OUTPUT_FILE = "/home/nlp/corpora/newsela_aligned/density_Jul-05-1256_epoch0.tsv"
 EMBED_SIZE = 1300
 PREFIX = "SDGHKASJDGHKJA"  # A string that should not appear in the test itself
@@ -43,12 +43,12 @@ def tag_chris_data(filename):
     """
     with open(filename) as file:
         lines = file.readlines()
-    """
+
     with open(filename + ".sents", "w") as file:
         for line in lines:
             file.write(PREFIX + " " + line.split('\t')[3].rstrip('\n') + '\n')
     StanfordParse.tag(filename + ".sents")
-    """
+
     with open(filename + ".sents.tagged") as file:
         lines_tagged = file.readlines()
 
@@ -96,13 +96,13 @@ def get_tagged_data(lines, lines_tagged):
     """
     final_lines = []
     for i in range(len(lines)):
-        word = lines[i].split('\t')[0].casefold()
-        ind = int(lines[i].split('\t')[1].casefold())
-        line = lines[i].split('\t')[3].rstrip('\n').casefold()
+        word = lines[i].split('\t')[0].lower()
+        ind = int(lines[i].split('\t')[1].lower())
+        line = lines[i].split('\t')[3].rstrip('\n').lower()
         if re.match('.*f331e.s3.amazonaws.com.*?&gt ; .*', line) and ind > 0:
             ind -= 23
         line = re.sub('.*f331e.s3.amazonaws.com.*?&gt ; ', '', line).split(' ')
-        line_tagged = lines_tagged[i].rstrip('\n').casefold()
+        line_tagged = lines_tagged[i].rstrip('\n').lower()
         line_tagged = re.sub('.*f331e.s3.amazonaws.com.*?&_cc gt_nn ;_: ', '',
                              line_tagged)
         line_tagged = re.sub('a\.m\._nn \._\.', 'a.m._nn',

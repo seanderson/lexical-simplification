@@ -68,7 +68,7 @@ def verify_data(lines, lines_tagged):
         ind = lines[i]['inds'][0]
         line = lines[i]['sent'].lower()
         if re.match('.*f331e.s3.amazonaws.com.*?&gt ; .*', line) and ind > 0:
-            ind -= 23
+            ind -= 20
         line = re.sub('.*f331e.s3.amazonaws.com.*?&gt ; ', '', line).split(' ')
         line_tagged = lines_tagged[i].rstrip('\n').lower()
         line_tagged = re.sub('.*f331e.s3.amazonaws.com.*?&_cc gt_nn ;_: ', '',
@@ -77,6 +77,7 @@ def verify_data(lines, lines_tagged):
                              line_tagged)
         line_tagged = re.sub('d-ill_nnp \._\.', 'd_ill._nnp',
                              line_tagged)
+        line_tagged = re.sub('\xc2\xa0', ' ', line_tagged)
         line_tagged = re.sub('u\.s_nnp \._\.', 'u.s._nnp', line_tagged).split(
             ' ')
         if '\xa0' in line:
@@ -85,23 +86,117 @@ def verify_data(lines, lines_tagged):
             line_tagged = re.sub(r' `_`` (s|re|ll|d|ve|m|60s|t|80s|40s)_',
                                  r' `\1_', ' '.join(line_tagged)).split(' ')
             if len(line) != len(line_tagged):
-                print("Line lengths are unequal! ln:" + str(i))
-                exit(-1)
+                # print(line)
+                # print(line_tagged)
+                # print("Line lengths are unequal! ln:" + str(i))
+                final_lines.append(get_tag_brute_force(line_tagged, word))
+                continue
         if word != line[ind]:
             if word == line[ind - 2]:
                 ind -= 2
             else:
-                print("Inconsistency withing the line!" + str(i))
-                exit(-1)
+                # print(word)
+                # print(line[ind])
+                # print(line)
+                # print("Inconsistency withing the line!" + str(i))
+                final_lines.append(get_tag_brute_force(line_tagged, word))
+                continue
         if word != '_'.join(line_tagged[ind].split('_')[:-1]):
             if re.sub('&amp;', '&', word) != '_'.join(
                     line_tagged[ind].split('_')[:-1]):
-                print("Inconsistency withing the tagged line!")
-                exit(-1)
+                # print("Inconsistency withing the tagged line!")
+                final_lines.append(get_tag_brute_force(line_tagged, word))
+                continue
         tag = line_tagged[ind].split('_')[-1].upper()
         tag = getGeneralisedPOS(tag)
         final_lines.append(tag)
     return final_lines
+
+
+def tokenize(sent, ind):
+    """
+    Imitation of stanford tokenizer that gets a character index and makes
+    sure that it point to the same char after tokenizatino
+    :param sent:
+    :param ind:
+    :return: sent, ind
+    """
+    sent = re.sub(r'\xe2\x80.', ' ', sent)
+    j = 0
+    while j < len(sent):
+        if sent[j] in ',":(][)$?;!.':
+            if j < ind:
+                ind += 1
+            if j != len(sent) - 1:
+                if sent[j - 1] not in ' "' and sent[j + 1] not in ' ",' or (sent[j] == '.' and j > 3 and sent[j - 3:j + 1] in ['U.N.', 'E.U.', 'U.S.']):
+                    j += 1
+                    continue
+                if j != 0:
+                    sent = sent[:j].rstrip(' ') + ' ' + sent[j] + ' ' + sent[ j + 1:].lstrip(' ')
+                else:
+                    sent = sent[j] + ' ' + sent[j + 1:].lstrip(' ')
+            else:
+                sent = sent[:j].rstrip(' ') + ' ' + sent[j]
+            j += 1
+        for k in [2, 3]:
+            if sent[j:j + k] in ['\'s', 'n\'t']:
+                if j < ind:
+                    ind += 1
+                if j != len(sent) - k:
+                    sent = sent[:j].rstrip(' ') + ' ' + sent[j:j + k] + ' ' + sent[ j + k:].lstrip(
+                        ' ')
+                else:
+                    sent = sent[:j].rstrip(' ') + ' ' + sent[j:j + k]
+                j += 1
+                break
+        if sent[j:j + 6] == "cannot":
+            if j < ind:
+                ind += 1
+            sent = sent[:j] + 'can not' + sent[j + 6:]
+        if sent[j:j + 3] == "s\' ":
+            if j < ind:
+                ind += 1
+            sent = sent[:j] + 's \' ' + sent[j + 3:]
+        if sent[j:j + 2] == '  ':
+            if j < ind:
+                ind -= 1
+            sent = sent[:j] + sent[j + 1:]
+            continue
+        if sent[j:j + 2] in ['AM', 'PM', 'am', 'pm'] and j > 0 and sent[
+            j - 1] in '0123456789':
+            if j < ind:
+                ind += 1
+            sent = sent[:j] + ' ' + sent[j:]
+            j += 1
+        j += 1
+    return sent, ind
+
+
+def get_tag_brute_force(sent, word):
+    """
+    In cases where it is difficult to match word indexes just find the first
+    occurance of a word in a line and output its POS tag
+    :param sent:
+    :param word:
+    :return:
+    """
+    sent = ' '.join(sent)
+    if word not in sent:
+        word = re.sub('[^a-z]', '', word)
+        if word in ['nt']:
+            return "RB"
+        if word in ['euros', 'songkhla', 'opinions']:
+            return 'NNS'
+        if word in ['selfmedicating', 'thoseaffected']:
+            return 'JJ'
+        if word in ['ve']:
+            return 'VBD'
+        print(word)
+        return "BAD" + "-" * 100
+    word_id = sent.index(word)
+    tag = re.sub(r'.*?_(.*?) .*', r'\1', sent[word_id:]).upper()
+    print(word, tag)
+    return getGeneralisedPOS(tag)
 
 
 def get_tags(text):
