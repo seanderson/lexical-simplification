@@ -30,6 +30,8 @@ from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
+from sklearn.metrics import classification_report
+from sklearn.metrics import fbeta_score
 from sklearn.metrics import make_scorer
 from sklearn.metrics import confusion_matrix
 import analyzer
@@ -53,13 +55,26 @@ REMOVE_ZEROS = False
 UNIQUE_ONLY = False
 DEBUG = False
 
-WORD_ONLY_CONFIG = ["POS","word_syllab","wv","synset_count", "synonym_count", "lexicon"]
-CONTEXT_ONLY_CONFIG = ["sent_syllab","word_count","mean_word_length"]
-ALL_FEATURES_CONFIG = ["POS", "sent_syllab", "word_syllab", "word_count", "mean_word_length",
-                       "wv", "synset_count", "synonym_count", "vowel_count", "1-gram", "2-gram",
-                       "3-gram","4-gram","5-gram","hit","labels", "lexicon"]
+WORD_ONLY_CONFIG = ["POS","word_syllab","synset_count", "synonym_count","vowel_count"]
+
+CONTEXT_CONFIG = ["POS","word_syllab","synset_count", "synonym_count", "vowel_count",
+                  "sent_syllab","word_count","mean_word_length","1-gram", "2-gram",
+                  "3-gram","4-gram","5-gram"]
+
+WITH_VECS_CONFIG = ["POS","word_syllab","synset_count", "synonym_count","vowel_count",
+                    "sent_syllab","word_count","mean_word_length","1-gram", "2-gram",
+                    "3-gram","4-gram","5-gram", "wv"]
+
+WITH_HIT_CONFIG = ["POS", "sent_syllab", "word_syllab", "word_count","vowel_count",
+                   "mean_word_length", "synset_count", "synonym_count", "1-gram",
+                   "2-gram", "3-gram","4-gram","5-gram","hit","wv","labels"]
+
+ALL_FEATURES_CONFIG = ["POS", "sent_syllab", "word_syllab", "word_count","vowel_count", "mean_word_length",
+                       "synset_count", "synonym_count", "1-gram", "2-gram",
+                       "3-gram","4-gram","5-gram","hit","wv", "lexicon","labels"]
+
+CONFIGS = [WORD_ONLY_CONFIG,CONTEXT_CONFIG,WITH_VECS_CONFIG,WITH_HIT_CONFIG,ALL_FEATURES_CONFIG]
 ONLY_VECS = ["wv"]
-DENSITY_ONLY = [False, False, False, False, False, False, True, False, False, False, False, False, False]
 CURRENT_CONFIG = ALL_FEATURES_CONFIG
 
 
@@ -184,7 +199,7 @@ def bi_num_to_arr(num):
 
 def bi_arr_to_num(arr):
     num = bi_arr_to_bi_num(arr)
-    return bi_arr_to_num(num)
+    return bi_num_to_num(num)
 
 
 def bi_arr_to_bi_num(arr):
@@ -356,9 +371,9 @@ def test_of_a_test(X, Y):
     earlyStopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=2, verbose=1, mode='auto')
     checkpoint = ModelCheckpoint(filepath=path, monitor='val_loss',verbose=1,save_best_only=True)
     callbacks = [earlyStopping, checkpoint]
-    #callbacks = None
+    callbacks = [earlyStopping]
     evaluator = KerasClassifier(build_fn=keras_NN, inDim=len(X[0]), hiddenShape=(4000,), epochs=50, verbose=2)
-    scorer = make_scorer(analyzer.custom_f1_scorer, labels=['c'], average=None)
+    scorer = make_scorer(analyzer.custom_f1_scorer)
     params = {'callbacks':callbacks,'validation_split':.01}
     scores = cross_val_score(evaluator,X,Y,scoring=scorer, cv=5, verbose=3, fit_params=params)
     return scores
@@ -442,8 +457,8 @@ def keras_NN(inDim, hiddenShape = (10,),learningRate = .0001):
             model.add(Dense(hiddenShape[layer], input_dim=inDim, bias_initializer=bInitializer, kernel_initializer=kInitializer, activation="tanh"))
         else:
             model.add(Dense(hiddenShape[layer], kernel_initializer=kInitializer, bias_initializer=bInitializer, activation="tanh"))
-    model.add(Dense(2))
-    model.add(Activation("softmax"))
+    model.add(Dense(2,kernel_initializer=kInitializer,bias_initializer=bInitializer,activation='softmax'))
+    #model.add(Activation("softmax"))
     print('Making network')
     model.compile(loss="binary_crossentropy", optimizer=adam, metrics=['acc'])
     return model
@@ -491,14 +506,18 @@ def grid_search(X, Y, cutoff=-1):
             callbacks = [earlyStopping]
             inDim = [len(X[0])]
             shapes = [(10,),(30,),(50,),(70,),(90,),(110,),(130,),(150,)]
-            s = [(3000,),(4000,),(5000,)]
+            s = [(10,),(100,),(1000,),(100,10),(1000,100)]
+            s1 = [(2000,),(3000,),(4000,),(5000,)]
             shapes2L = [(1,1,),(100,50,),(500,250,),(1000,500,),(1500,750,),(2000,1000,),(2500,1250,),(3000,1500,),(4000,2000,),(5000,2500,)]
             shapes3L = [(1,1,1,),(100,50,25,),(500,250,125,),(1000,500,125,),(1500,750,375,),(2000,1000,500,),(2500,1250,625,),(3000,1500,750,),(4000,2000,1000,),(5000,2500,1250,)]
             shapes_weird_but_good = [(10,30,50,70,110,130,150)]
-            lrs = [.00001]
-            parameters = {'inDim':inDim,'hiddenShape':s,'learningRate':lrs}
+            hiddenshape = s1
+            if DEBUG:
+                hiddenshape = [(100,)]
+            lrs = [.0001]
+            parameters = {'inDim':inDim,'hiddenShape':hiddenshape,'learningRate':lrs}
             evaluator = KerasClassifier(build_fn=keras_NN, epochs=100,verbose=2)
-            scorer = make_scorer(a.getScorer(), labels=['c'], average=None)
+            scorer = make_scorer(analyzer.custom_f1_scorer, labels=['c'], average=None)
             clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3,
                                n_jobs=1, cv=folds)
             clf.fit(X, Y, callbacks=callbacks, validation_split=.1)
@@ -511,7 +530,7 @@ def grid_search(X, Y, cutoff=-1):
         if(DEBUG):
             parameters = {'kernel': ['rbf'], 'C': [1, 10], 'gamma': [1, 10], 'early_stopping': [True]}
         evaluator = svm.SVC()
-        scorer = make_scorer(a.getScorer(), labels=['c'], average=None)
+        scorer = make_scorer(analyzer.custom_f1_scorer)
         clf = GridSearchCV(evaluator, parameters, scoring=scorer, verbose=3,
                            n_jobs=1, cv=folds)
         clf.fit(X, Y)
@@ -525,7 +544,8 @@ def analyzeScores(scores):
     return scoresMean
 
 
-def test_over_multiple_feature_sets(featureSets, trainPath, testPath):
+def test_over_multiple_feature_sets(featureSets, trainPath, testPath=None):
+    oneSet = testPath is None
     a = analyzer.Analyzer(DATA_USE_TYPE)
     for i in range(len(featureSets)):
         featSet = featureSets[i]
@@ -546,26 +566,26 @@ def test_over_multiple_feature_sets(featureSets, trainPath, testPath):
             complexScores = tempX
         if DATA_IN_TYPE != DATA_USE_TYPE:
             complexScores = convert_data(DATA_IN_TYPE,DATA_USE_TYPE, complexScores)
-        if NNET:
-            rawDat = test_of_a_test(featureData, complexScores)
+        if oneSet:
+            XTr, XTe, YTr, YTe = train_test_split(featureData,complexScores, test_size=.20)
         else:
-            rawDat = five_fold_test(featureData, complexScores)
-        with open('networks/shape.txt') as file:
-            shapeAndInDim = file.readlines()
-            shape = tuple(shapeAndInDim[0])
-            inDim = int(shapeAndInDim[1])
+            XTr = featureData
+            YTr = complexScores
+        if NNET:
+            test_of_a_test(XTr, YTr)
+        else:
+            five_fold_test(XTr, YTr)
+        if not oneSet:
+            fe = generate_features.CustomFeatureEstimator(featSet, testPath)
+            XTe = fe.load_features()
+            YTe = fe.load_labels()
         model = keras.models.load_model('networks/saved-network.hdf5')
-        fe = generate_features.CustomFeatureEstimator(featSet, testPath)
-        featureData = fe.load_features()
-        complexScores = fe.load_labels()
-        preds = model.predict(featureData)
-        result = analyzer.custom_f1_scorer(complexScores,preds)
+        preds = model.predict(XTe)
+        result = analyzer.custom_f1_scorer(YTe,preds)
         return result
 
 
 def grid_search_over_multiple_feature_sets(featureSets):
-    a = analyzer.Analyzer(DATA_USE_TYPE)
-    scorer = a.getScorer()
     scores = {}
     for i in range(len(featureSets)):
         featSet = featureSets[i]
@@ -588,14 +608,23 @@ def grid_search_over_multiple_feature_sets(featureSets):
         if DATA_IN_TYPE != DATA_USE_TYPE:
             complexScores = convert_data(DATA_IN_TYPE, DATA_USE_TYPE,
                                          complexScores)
-        grid_search(featureData,complexScores,cutoff=-1)
-        score = scorer(rawDat)
-        scores[i] = [featSet, score]
+        bestScore,bestEst,scoresG = grid_search(featureData,complexScores,cutoff=30000)
+        scores[i] = [featSet, bestScore, bestEst, scoresG]
     return scores
 
 
 if __name__ == '__main__':
-    print(test_over_multiple_feature_sets([ALL_FEATURES_CONFIG],))
+    #print(test_over_multiple_feature_sets([ALL_FEATURES_CONFIG],))
+    if DEBUG:
+        CONFIGS = [WORD_ONLY_CONFIG,CONTEXT_CONFIG]
+    #results = grid_search_over_multiple_feature_sets(CONFIGS)
+    results = grid_search_over_multiple_feature_sets([ALL_FEATURES_CONFIG])
+    for key in results.keys():
+        r = results[key]
+        print(r[0])
+        print(r[1])
+        print(r[2])
+        print('')
     a = analyzer.Analyzer(DATA_USE_TYPE)
     if TESTCLASSIFY:
         iris = datasets.load_iris()
@@ -636,7 +665,7 @@ if __name__ == '__main__':
             print(analyzeScores(scores))
             print(str(bestScore))
             print(bestEst)
-        print(test_of_a_test(featureData, complexScores))
+        #print(test_of_a_test(featureData, complexScores))
         rawDat = five_fold_test(featureData, complexScores)
         #rawDat = please_work(featureData, complexScores)
         #rawDat = please_work_sk(featureData, complexScores)
@@ -658,7 +687,7 @@ if __name__ == '__main__':
             else:
                 print('ERROR: DATA_USE_TYPE '+DATA_USE_TYPE+' does not have an ALL_COMPLEX case')
         processedData = a.process_results(rawDat)
-        rawDat = None
+        #rawDat = None
         precision = analyzer.calc_precision(processedData)
         recall = analyzer.calc_recall(processedData)
         print(getStateAsString())
@@ -666,8 +695,8 @@ if __name__ == '__main__':
         print([len(category) for category in processedData])
         print('% categorically correct')
         print(a.calc_percent_categorically_right(processedData))
-        print('(precision, recall, f_measure)')
-        print(precision, recall, analyzer.calc_f_measure(precision, recall))
+        report = classification_report(rawDat[1],rawDat[0])
+        print(report)
         # sc = a.getScorer()
         # rawDat[0] = convert_data('bi_arr','bi_num',rawDat[0])
         # print(sc(rawDat[1],rawDat[0]))
