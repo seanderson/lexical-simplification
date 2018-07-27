@@ -25,7 +25,7 @@ EMB_MODEL = paths.NEWSELA_ALIGNED + "model.bin"
 # alpha = 0.01, min_alpha = 1.0e-9, negative sampling = 5. The third epoch is
 # taken because it shows the best score on SimLex-999
 EMB_SIZE = 500
-N_ALT = 0
+N_ALTERNATIVES = 0
 # the number of substitution candidates to add (the substitutions are chosen
 # from the nearest word vecors that bear the same POS tag). This constant should
 # be zero, if the document in question contains phrases
@@ -59,13 +59,13 @@ class CustomFeatureEstimator:
     VOWEL_REGEX = re.compile(r'[AEIOUYaeiouy]')
     NON_ASCII = '[^\x00-\x7F]'
 
-    def __init__(self, feature_names, directory=self.directory):
+    def __init__(self, feature_names, directory=FEATURE_DIR):
         """
         Creates an instance of the FeatureEstimator class.
         :param feature_names: the features to calculate when running
         calculate_features
         """
-        self.directory = self.directory
+        self.directory = directory
         self.all_features = {}
         self.fill_all_features()
         self.results = {}
@@ -73,7 +73,7 @@ class CustomFeatureEstimator:
         # self.features is an array of features that will be used during this
         # particular run
 
-        if N_ALT > 0:
+        if N_ALTERNATIVES > 0:
             if feature_names[0] != 'wv' and (
                     feature_names[1] != 'wv' or feature_names[0] != 'POS'):
                 print('If alternatives are to be calculated, place POS and wv '
@@ -204,7 +204,7 @@ class CustomFeatureEstimator:
         result = []
         for i in range(len(data)):
             n_of_words = n_candidates[i]  # N of words in sent
-            result.append(numpy.zeros(N_ALT + 1))
+            result.append(numpy.zeros(N_ALTERNATIVES + 1))
             if n_of_words != 0:
                 for j in range(len(result[-1])):
                     result[-1][j] = output[ind + j]
@@ -264,7 +264,7 @@ class CustomFeatureEstimator:
         dict = {}
         result = []
         for line in data:
-            result.append(numpy.zeros(N_ALT + 1))
+            result.append(numpy.zeros(N_ALTERNATIVES + 1))
             for j in range(len(line['words'])):
                 word = line['words'][j].lower()
                 if word not in dict:
@@ -284,7 +284,7 @@ class CustomFeatureEstimator:
         dict = {}
         result = []
         for line in data:
-            result.append(numpy.zeros(N_ALT + 1))
+            result.append(numpy.zeros(N_ALTERNATIVES + 1))
             for j in range(len(line['words'])):
                 word = line['words'][j].lower()
                 if word not in dict:
@@ -334,19 +334,19 @@ class CustomFeatureEstimator:
             target = data[i]['words'][0].lower() + '_' + tag
             result.append([])
             if target not in model.vocab:
-                result[-1].append(numpy.zeros(EMB_SIZE * (N_ALT + 1) + N_ALT))
+                result[-1].append(numpy.zeros(EMB_SIZE * (N_ALTERNATIVES + 1) + N_ALTERNATIVES))
                 file.write('\n')
             else:
                 if i % 100 == 0:  # Debugging progress
                     print(i)
                 result[-1].append(model[target])
-                if N_ALT > 0:  # in this case possible substitutions will be
+                if N_ALTERNATIVES > 0:  # in this case possible substitutions will be
                     # selected based on the topn most similar word vectors
                     closest = model.wv.most_similar(positive=[target], topn=TOP_N)
                     j = 0
                     ind = 0
-                    cosines = numpy.zeros(N_ALT)
-                    while j < len(closest) and ind < N_ALT:
+                    cosines = numpy.zeros(N_ALTERNATIVES)
+                    while j < len(closest) and ind < N_ALTERNATIVES:
                         substitution, cosine = closest[j]
                         substitution = substitution.split('_')
                         word = '_'.join(substitution[:-1])
@@ -363,7 +363,7 @@ class CustomFeatureEstimator:
                             ind += 1
                         j += 1
                     file.write('\n')
-                    while len(result[-1]) != N_ALT + 1:
+                    while len(result[-1]) != N_ALTERNATIVES + 1:
                         result[-1].append(numpy.zeros(EMB_SIZE))
                     result[-1].append(cosines)
             result[-1] = numpy.concatenate(result[-1])
@@ -375,13 +375,13 @@ class CustomFeatureEstimator:
         :param data:
         :return:
         """
-        if N_ALT > 0:
+        if N_ALTERNATIVES > 0:
             result = []
             for line in data:
                 if line['subst'] in line['words']:
                     result.append(line['words'].index(line['subst']))
                 else:
-                    result.append(N_ALT + 1)
+                    result.append(N_ALTERNATIVES + 1)
             return result
         return [line['score'] for line in data]
 
@@ -400,7 +400,7 @@ class CustomFeatureEstimator:
         :param n:
         :return:
         """
-        result = numpy.zeros((len(data), (N_ALT + 1) * n))
+        result = numpy.zeros((len(data), (N_ALTERNATIVES + 1) * n))
         dictionary = {}
         # dictionary of values that are to be looked up in the n-grams
         for i in range(len(data)):
@@ -485,7 +485,7 @@ class CustomFeatureEstimator:
         # a given hit_id
         result = []
         for i in range(len(data)):
-            result.append(numpy.zeros((N_ALT + 1) * 2))
+            result.append(numpy.zeros((N_ALTERNATIVES + 1) * 2))
             # result[i][j * 2] is the count of token[j] in lines with
             # hit_id = data[i]['hit']
             # result[i][j * 2 + 1] is the number of such lines
@@ -524,7 +524,7 @@ class CustomFeatureEstimator:
         """
         result = []
         for i in range(len(data)):
-            result.append(numpy.zeros(N_ALT + 1))
+            result.append(numpy.zeros(N_ALTERNATIVES + 1))
             tokens = data[i]['words'] + data[i]['phrase']
             for j in range(len(tokens)):
                 result[-1][j] = len(self.VOWEL_REGEX.findall(tokens[j]))
@@ -544,7 +544,7 @@ class CustomFeatureEstimator:
         result = []
         for i in range(len(data)):
             line = data[i]
-            result.append(numpy.zeros((N_ALT + 1) * 2 * size))
+            result.append(numpy.zeros((N_ALTERNATIVES + 1) * 2 * size))
             for j in range(len(line['words'])):
                 word = line['words'][j].lower()
                 tag = self.NUM_TO_TAG[self.results['POS'][i][0]]
@@ -587,9 +587,9 @@ def get_raw_data():
             del tmp[bad_id]
             line['sent'] = ' '.join(tmp)
     LOADIT = False
-    if N_ALT > 0 and LOADIT:
+    if N_ALTERNATIVES > 0 and LOADIT:
         with open(self.directory + "substitutions") as file:
-            subst = [re.sub(CustomFeatureEstimator.NON_ASCII, '', x.rstrip('\n')).split('\t')[:N_ALT] for x in file.readlines()]
+            subst = [re.sub(CustomFeatureEstimator.NON_ASCII, '', x.rstrip('\n')).split('\t')[:N_ALTERNATIVES] for x in file.readlines()]
         for i in range(len(subst)):
             for s in subst[i]:
                 if s != "":
@@ -664,20 +664,20 @@ if __name__ == "__main__":
         print(str(data[i]['words']))
         # print(data[i]['subst'])
         print("POS: " + CustomFeatureEstimator.NUM_TO_TAG[features[i][0]])
-        print("hit: " + str(features[i][1:1 + 2 * (N_ALT + 1)]))
-        print("sent_syllab: " + str(features[i][1 + 2 * (N_ALT + 1)]))
-        print("word_syllab: " + str(features[i][2 + 2 * (N_ALT + 1):2 + 3 * (N_ALT + 1)]))
-        print("word_count: " + str(features[i][2 + 3 * (N_ALT + 1)]))
-        print("mean_word_length: " + str(features[i][3 + 3 * (N_ALT + 1)]))
-        print("synset_count: " + str(features[i][4 + 3 * (N_ALT + 1):4 + 4 * (N_ALT + 1)]))
-        print("synonym_count: " + str(features[i][4 + 4 * (N_ALT + 1):4 + 5 * (N_ALT + 1)]))
-        print("vowel_count: " + str(features[i][4 + 5 * (N_ALT + 1):4 + 6 * (N_ALT + 1)]))
-        print("1-gram: " + str(features[i][4 + 6 * (N_ALT + 1):4 + 7 * (N_ALT + 1)]))
-        print("2-gram: " + str(features[i][4 + 7 * (N_ALT + 1):4 + 9 * (N_ALT + 1)]))
-        print("3-gram: " + str(features[i][4 + 9 * (N_ALT + 1):4 + 12 * (N_ALT + 1)]))
-        print("4-gram: " + str(features[i][4 + 12 * (N_ALT + 1):4 + 16 * (N_ALT + 1)]))
-        print("5-gram: " + str(features[i][4 + 16 * (N_ALT + 1):4 + 21 * (N_ALT + 1)]))
-        if N_ALT > 0:
-            print("cosines: " + str(features[i][-N_ALT:]))
-        print("wv: " + str(features[i][4 + 21 * (N_ALT + 1):4 + 521 * (N_ALT + 1)]))
+        print("hit: " + str(features[i][1:1 + 2 * (N_ALTERNATIVES + 1)]))
+        print("sent_syllab: " + str(features[i][1 + 2 * (N_ALTERNATIVES + 1)]))
+        print("word_syllab: " + str(features[i][2 + 2 * (N_ALTERNATIVES + 1):2 + 3 * (N_ALTERNATIVES + 1)]))
+        print("word_count: " + str(features[i][2 + 3 * (N_ALTERNATIVES + 1)]))
+        print("mean_word_length: " + str(features[i][3 + 3 * (N_ALTERNATIVES + 1)]))
+        print("synset_count: " + str(features[i][4 + 3 * (N_ALTERNATIVES + 1):4 + 4 * (N_ALTERNATIVES + 1)]))
+        print("synonym_count: " + str(features[i][4 + 4 * (N_ALTERNATIVES + 1):4 + 5 * (N_ALTERNATIVES + 1)]))
+        print("vowel_count: " + str(features[i][4 + 5 * (N_ALTERNATIVES + 1):4 + 6 * (N_ALTERNATIVES + 1)]))
+        print("1-gram: " + str(features[i][4 + 6 * (N_ALTERNATIVES + 1):4 + 7 * (N_ALTERNATIVES + 1)]))
+        print("2-gram: " + str(features[i][4 + 7 * (N_ALTERNATIVES + 1):4 + 9 * (N_ALTERNATIVES + 1)]))
+        print("3-gram: " + str(features[i][4 + 9 * (N_ALTERNATIVES + 1):4 + 12 * (N_ALTERNATIVES + 1)]))
+        print("4-gram: " + str(features[i][4 + 12 * (N_ALTERNATIVES + 1):4 + 16 * (N_ALTERNATIVES + 1)]))
+        print("5-gram: " + str(features[i][4 + 16 * (N_ALTERNATIVES + 1):4 + 21 * (N_ALTERNATIVES + 1)]))
+        if N_ALTERNATIVES > 0:
+            print("cosines: " + str(features[i][-N_ALTERNATIVES:]))
+        print("wv: " + str(features[i][4 + 21 * (N_ALTERNATIVES + 1):4 + 521 * (N_ALTERNATIVES + 1)]))
         print("label: " + str(labels[i]))
