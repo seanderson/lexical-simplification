@@ -9,7 +9,7 @@ The same directory houses data about alignments. See README.md inside the direct
 
 * stanford-parser-full-2015-12-09 - is exactly what it says
 
-* stanford-postagger - June 2018 Stanford postagger. Note: this is not the tagger used by to tag the text_databases.
+* stanford-postagger - June 2018 Stanford postagger. Note: this is not the tagger used to tag the text_databases.
 This tagger is used to tag the datasets.
 
 * lexicons - various lexicons to be used by generate_features.py. See README.md inside the directory for details.
