@@ -13,9 +13,9 @@ TAGGING_DIRECTORY = "/home/nlp/corpora/newsela_aligned/"
 # a directory there all the tagged files go
 
 def tag(textfile):
-    result = subprocess.check_output(['java', '-mx2048m','-cp', path.CLASSPATH, "edu.stanford.nlp.tagger.maxent.MaxentTagger", "-model", '/home/nlp/newsela/stanford-postagger/models/english-bidirectional-distsim.tagger', "-textFile", textfile], shell=False)
+    result = subprocess.check_output(['java', '-mx2048m','-cp', path.CLASSPATH, "edu.stanford.nlp.tagger.maxent.MaxentTagger", "-model", '/home/nlp/wpred/stanford-postagger/models/english-bidirectional-distsim.tagger', "-textFile", textfile], shell=False)
     with open(textfile + ".tagged", 'w') as file:
-        file.writelines(result)
+        file.writelines(result.decode("utf8"))
 
 def tag_data(lines):
     """

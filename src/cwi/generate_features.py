@@ -11,14 +11,14 @@ import gensim
 
 Lemmatizer = WordNetLemmatizer()
 LEXICON = "/home/nlp/Lexicons/ALL.tsv"
-N_GRAM_DIRECTORY = "/home/nlp/wpred/n-grams/"
+N_GRAM_DIRECTORY = "/home/nlp/wpred/googleNGrams/"
 GOOGLE_NGRAM = "GOOGLE"
 SEW_NGRAM = "SEW"
 # ORIGINAL_DATA = paths.NEWSELA_ALIGNED + "dataset_new.txt"
 CWI_DATA = "/home/nlp/wpred/datasets/cwi/traindevset/english/News_Dev.tsv"
 # the data in "Chris" format, i.e. a line with tab-separated values:
 # word  ind score   sentence    substituition (the latter is optional)
-FEATURE_DIR = "/home/nlp/wpred/satasets/cwi/traindevset/english/News_Dev_Features/"
+FEATURE_DIR = "/home/nlp/wpred/datasets/cwi/traindevset/english/News_Dev_Features/"
 # the directory to which all the numpy arrays will be stored
 EMB_MODEL = "/home/nlp/wpred/word2vecmodels/model.bin"
 # current model is trained with vectors of size 500, window = 5
@@ -648,7 +648,7 @@ def smart_lemmatize(word, treebank_tag):
 
 
 if __name__ == "__main__":
-    fe = CustomFeatureEstimator(["POS", "hit", "sent_syllab", "word_syllab",
+    fe = CustomFeatureEstimator(["hit",
                                  "word_count", "mean_word_length",
                                  "synset_count", "synonym_count", "vowel_count",
                                  "1-gram", "2-gram", "3-gram", "4-gram",
