@@ -14,11 +14,11 @@ LEXICON = "/home/nlp/Lexicons/ALL.tsv"
 N_GRAM_DIRECTORY = "/home/nlp/corpora/n-grams/"
 GOOGLE_NGRAM = "GOOGLE"
 SEW_NGRAM = "SEW"
-ORIGINAL_DATA = paths.NEWSELA_ALIGNED + "dataset.txt"
+ORIGINAL_DATA = paths.NEWSELA_ALIGNED + "dataset_new.txt"
 CWI_DATA = "/home/nlp/corpora/cwi/traindevset/english/News_Dev.tsv"
 # the data in "Chris" format, i.e. a line with tab-separated values:
 # word  ind score   sentence    substituition (the latter is optional)
-FEATURE_DIR = "/home/nlp/corpora/cwi/traindevset/english/Full_Features_Sasha/features_wikipedia_test/"
+FEATURE_DIR = "/home/nlp/corpora/newsela_aligned/features_alternative2/"
 # the directory to which all the numpy arrays will be stored
 EMB_MODEL = paths.NEWSELA_ALIGNED + "model.bin"
 # current model is trained with vectors of size 500, window = 5

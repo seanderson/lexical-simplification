@@ -1,4 +1,5 @@
 from sklearn.metrics import confusion_matrix
+from sklearn.metrics import fbeta_score
 import featureClassification
 
 
@@ -290,6 +291,6 @@ def custom_f1_scorer(y, y_pred, **kwargs):
     :param kwargs:
     :return: the f score
     """
-    a = Analyzer(y[0])
-    scorer = a.getScorer()
-    return scorer(y, y_pred, **kwargs)
+    y = featureClassification.convert_data('bi_arr','bi_num',y)
+    score = fbeta_score(y,y_pred,1,average='weighted')
+    return score

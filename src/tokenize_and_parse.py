@@ -53,4 +53,4 @@ def processFile(slug,numberOfLevels = 6):
             print('ERROR while parsing %s' % (slug))
 
 if __name__ == "__main__":
-    processFile("Hurricane-drones")
+    all()

@@ -23,9 +23,9 @@ def test_classifier(clf,x,y,multiword=[]):
         if multiword[i] == 1:
             pred[i] = 1 # force multiword to complex
 
-    print precision_recall_fscore_support(y,pred, average='macro')
-    print f1_score(y,pred)
-    print classification_report(y,pred)
+    print (precision_recall_fscore_support(y,pred, average='macro'))
+    print (f1_score(y,pred))
+    print (classification_report(y,pred))
 
 def load_dataset(num):
     f =  flist[num]

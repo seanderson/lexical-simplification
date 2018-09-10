@@ -35,7 +35,6 @@ from sklearn.metrics import fbeta_score
 from sklearn.metrics import make_scorer
 from sklearn.metrics import confusion_matrix
 import analyzer
-import dataLoader
 import generate_features
 import copy
 import random
@@ -76,6 +75,24 @@ ALL_FEATURES_CONFIG = ["POS", "sent_syllab", "word_syllab", "word_count","vowel_
 CONFIGS = [WORD_ONLY_CONFIG,CONTEXT_CONFIG,WITH_VECS_CONFIG,WITH_HIT_CONFIG,ALL_FEATURES_CONFIG]
 ONLY_VECS = ["wv"]
 CURRENT_CONFIG = ALL_FEATURES_CONFIG
+
+
+def remove_duplicates(X,Y):
+    linesToRemove = []
+    words = {}
+    for lineInd in range(len(X)):
+        if X[lineInd][-1] in words:
+            words[X[lineInd][-1]].append(lineInd)
+        else:
+            words[X[lineInd][-1]] = [lineInd]
+    for word in list(words):
+        if len(words[word]) > 1:
+            for instance in words[word]:
+                linesToRemove.append([X[instance],Y[instance]])
+    for line in linesToRemove:
+        X.remove(line[0])
+        Y.remove(line[1])
+    return X,Y
 
 
 def getStateAsString():
@@ -363,7 +380,7 @@ def five_fold_test(X, Y):
 
 
 def test_of_a_test(X, Y):
-    shape = (4000,)
+    shape = (1000,100)
     with open('networks/shape.txt','w') as file:
         file.write(str(shape)+'\n'+str(len(X[0])))
     #path = 'networks/saved-network-{epoch:02d}-{val_loss:.2f}.hdf5'
@@ -371,8 +388,8 @@ def test_of_a_test(X, Y):
     earlyStopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=2, verbose=1, mode='auto')
     checkpoint = ModelCheckpoint(filepath=path, monitor='val_loss',verbose=1,save_best_only=True)
     callbacks = [earlyStopping, checkpoint]
-    callbacks = [earlyStopping]
-    evaluator = KerasClassifier(build_fn=keras_NN, inDim=len(X[0]), hiddenShape=(4000,), epochs=50, verbose=2)
+    #callbacks = [earlyStopping]
+    evaluator = KerasClassifier(build_fn=keras_NN, inDim=len(X[0]), hiddenShape=shape, epochs=50, verbose=2)
     scorer = make_scorer(analyzer.custom_f1_scorer)
     params = {'callbacks':callbacks,'validation_split':.01}
     scores = cross_val_score(evaluator,X,Y,scoring=scorer, cv=5, verbose=3, fit_params=params)
@@ -544,8 +561,11 @@ def analyzeScores(scores):
     return scoresMean
 
 
-def test_over_multiple_feature_sets(featureSets, trainPath, testPath=None):
+def test_over_multiple_feature_sets(featureSets, trainPath=None, testPath=None):
+    scores = {}
     oneSet = testPath is None
+    if trainPath is None:
+        trainPath = generate_features.FEATURE_DIR
     a = analyzer.Analyzer(DATA_USE_TYPE)
     for i in range(len(featureSets)):
         featSet = featureSets[i]
@@ -554,7 +574,7 @@ def test_over_multiple_feature_sets(featureSets, trainPath, testPath=None):
         featureData = fe.load_features()
         complexScores = fe.load_labels()
         if UNIQUE_ONLY:
-            featureData, complexScores = dataLoader.remove_duplicates(featureData,complexScores)
+            featureData, complexScores = remove_duplicates(featureData,complexScores)
         if REMOVE_ZEROS:
             tempX = []
             tempY = []
@@ -581,8 +601,12 @@ def test_over_multiple_feature_sets(featureSets, trainPath, testPath=None):
             YTe = fe.load_labels()
         model = keras.models.load_model('networks/saved-network.hdf5')
         preds = model.predict(XTe)
-        result = analyzer.custom_f1_scorer(YTe,preds)
-        return result
+        preds = map(prob_arr_to_str,preds)
+        preds = convert_data('bi_str','bi_num',preds)
+        YTe = convert_data('bi_arr','bi_num', YTe)
+        result = classification_report(YTe,preds)
+        scores[i] = [featSet,result]
+    return scores
 
 
 def grid_search_over_multiple_feature_sets(featureSets):
@@ -594,8 +618,7 @@ def grid_search_over_multiple_feature_sets(featureSets):
         featureData = fe.load_features()
         complexScores = fe.load_labels()
         if UNIQUE_ONLY:
-            featureData, complexScores = dataLoader.remove_duplicates(
-                featureData, complexScores)
+            featureData, complexScores = remove_duplicates(featureData, complexScores)
         if REMOVE_ZEROS:
             tempX = []
             tempY = []
@@ -614,6 +637,12 @@ def grid_search_over_multiple_feature_sets(featureSets):
 
 
 if __name__ == '__main__':
+    te = test_over_multiple_feature_sets(CONFIGS)
+    for key in te.keys():
+        print(te[key][0])
+        print(te[key][1])
+        print('')
+    print('Done :)')
     #print(test_over_multiple_feature_sets([ALL_FEATURES_CONFIG],))
     if DEBUG:
         CONFIGS = [WORD_ONLY_CONFIG,CONTEXT_CONFIG]
@@ -652,10 +681,10 @@ if __name__ == '__main__':
         fe = generate_features.CustomFeatureEstimator(["POS", "sent_syllab", "word_syllab",
                                      "word_count", "mean_word_length", "wv",
                                      "synset_count", "synonym_count", "labels"],generate_features.FEATURE_DIR)
-        featureData = fe.load_features()
+        #featureData = fe.load_features()
         complexScores = fe.load_labels()
         if UNIQUE_ONLY:
-            featureData, complexScores = dataLoader.remove_duplicates(featureData,complexScores)
+            featureData, complexScores = remove_duplicates(featureData,complexScores)
         if REMOVE_ZEROS:
             featureData, complexScores = remove_zeros(featureData, complexScores)
         if DATA_IN_TYPE != DATA_USE_TYPE:
