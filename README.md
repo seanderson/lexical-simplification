@@ -15,7 +15,7 @@ This tagger is used to tag the datasets.
 * lexicons - various lexicons to be used by generate_features.py. See README.md inside the directory for details.
 
 * datasets - the three main datasets used for the CWI and LEXSIMP tasks:
-    1. native - the data obtained from the alignments of teh newsela corpus
+    1. native - the data obtained from the alignments of the newsela corpus
     2. kriz - courtesy of Reno Kriz (see Simplification Using Paraphrases and Context-based Lexical Substitution)
     3. cwi - data from the Complex Word Identification Shared Task 2018
     
