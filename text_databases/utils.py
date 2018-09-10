@@ -207,6 +207,6 @@ if __name__ == "__main__":
     print_vocabulary(sys.argv[2], voc, databases)"""
 
     # freq = 20
-    lowercase_voc("/home/nlp/wpred/text_databases/voc_uppercase.txt")
+    lowercase_voc("/home/nlp/wpred/text_databases/voc.tsv")
     # process_vocabulary("/home/nlp/wpred/text_databases/voc.txt",
     #                    "/home/nlp/wpred/text_databases/voc_freq>="+str(freq)+".txt", freq)

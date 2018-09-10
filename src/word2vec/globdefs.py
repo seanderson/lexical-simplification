@@ -39,7 +39,7 @@ STANFORD_JAR=STANFORD_POS_BASE+ "stanford-postagger.jar"
 
 
 DATA_METAFILE = "/home/nlp/wpred/text_databases/metafile.txt"
-VOCFILE = "/home/nlp/wpred/text_databases/voc.txt"
+VOCFILE = "/home/nlp/wpred/text_databases/voc.tsv"
 VOC_HDR_WORD = "Word"
 VOC_HDR_TOTAL = "Total"
 

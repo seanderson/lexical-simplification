@@ -135,7 +135,7 @@ def getTokParagraphs(article, separateBySemicolon=False, MODIFY_HEADER=False):
             lines[1] = modify_the_header(lines[1])
         i = 0
         while i < len(lines):
-            if lines[i][0] == "#":
+            if lines[i][0] == "#" or not re.match('.*[a-zA-Z].*', lines[i]):
                 del lines[i]
                 continue
             if separateBySemicolon:

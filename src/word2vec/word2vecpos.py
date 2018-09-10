@@ -94,6 +94,7 @@ def main(DATABASE=None):
     # output from training in new directory
     mtype = 'skip' if SKIPGRAM == 1 else 'cbow'
     outdir = mtype + '-{:%Y-%b-%d-%H%M}'.format(datetime.datetime.now())
+    outdir = "/home/nlp/wpred/word2vecmodels/" + outdir
     pathlib.Path(outdir).mkdir(parents=False, exist_ok=False)
 
     epoch_saver = EpochSaver(outdir)

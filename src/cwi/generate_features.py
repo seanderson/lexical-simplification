@@ -648,11 +648,11 @@ def smart_lemmatize(word, treebank_tag):
 
 
 if __name__ == "__main__":
-    fe = CustomFeatureEstimator(["hit",
+    fe = CustomFeatureEstimator(["POS", "hit", "sent_syllab", "word_syllab",
                                  "word_count", "mean_word_length",
                                  "synset_count", "synonym_count", "vowel_count",
                                  "1-gram", "2-gram", "3-gram", "4-gram",
-                                 "5-gram", "labels"])
+                                 "5-gram", "wv", "labels"])
     # fe = CustomFeatureEstimator(["lexicon"])
     fe.calculate_features(get_cwi_data())
     exit(0)

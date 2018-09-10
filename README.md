@@ -22,7 +22,8 @@ This tagger is used to tag the datasets.
 * text_databases - various text databases that are used to create wor2vec representations of the words. See README.md
 inside the directory for details.
 
-* src - All the code except for the code for database processing and Stanford Corenlp utilities. 
+* src - All the code except for the code for database processing and Stanford Corenlp utilities. See README.md
+inside the directory for details.
 
 * word2vecmodels - models obtained from text_databases
 

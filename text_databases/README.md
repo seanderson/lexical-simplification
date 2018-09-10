@@ -37,6 +37,6 @@ when it is certain that no file in the database is larger than approx. 20 MB
 * utils.py - some additional utilities (including the option of building
 a vocabulary)
 
-* voc.tsv - sample vocabulary files
+* voc.tsv, voc_uppercase.tsv - sample vocabulary files
 
 * README.md - this file

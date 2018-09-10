@@ -8,11 +8,6 @@ from src.newselautil import *
 from src import classpaths as path
 import numpy
 import re
-# import utils_for_reno_kriz_data
-import sys
-sys.path.insert(0, '/home/nlp/newsela/monolingual-word-aligner/monolingual-word-aligner')
-
-# import aligner
 
 
 class Alignment(object):
@@ -242,11 +237,6 @@ def get_aligned_sentences(metafile, slug, level1, level2, auto=True, use_spacy=F
             if count < len(block[-1].sent0.split(';')):
                 del block[-1]
             new_result += block
-    if use_spacy:
-        with io.open(path.BASEDIR + '/articles/' + slug + '.en.0.txt.spacy') as file:
-            lines = file.readlines()
-        for alignment in new_result:
-            alignment.sent0 = lines[alignment.ind0]
     return sorted(new_result, key=lambda smth: smth.ind0, reverse=False)
 
 
@@ -291,39 +281,6 @@ def concatenate(alignments):
             else:
                 j += 1
         i += 1
-
-
-def sultan_aligner(sent0, sent1, tags0, tags1, expectation):
-    """
-
-    :param sent0:
-    :param sent1:
-    :return:
-    """
-    if len(sent0) != len(sent1):
-        return
-    indexes, alignments = aligner.align(sent0, sent1)
-    alignments = [([alignments[i][0], [indexes[i][0] - 1]],
-                   [alignments[i][1], [indexes[i][1] - 1]]) for i in range(len(alignments))]
-    concatenate(alignments)
-    alignments = [x for x in alignments if x[0][0].lower() != x[1][0].lower() and x[0][0].lower() not in STOPWORDS and x[1][0].lower() not in STOPWORDS]
-    i = 0
-    while i < len(alignments):
-        a = alignments[i]
-        if len(a[0][1]) == 1 and len(a[1][1]) == 1:
-            alignments[i] = ([a[0][0], tags0[a[0][1][0]]], [a[1][0], tags1[a[1][1][0]]])
-            if alignments[i][0][1][0] != alignments[i][1][1][0]:
-                # print("parts of speech are different: " + str(alignments[i]))
-                pass
-            if smart_lemmatize(alignments[i][0][0], alignments[i][0][1]) == smart_lemmatize(alignments[i][1][0], alignments[i][1][1]):
-                del alignments[i]
-                continue
-        i += 1
-    if len(alignments) == expectation:
-        print(' '.join(sent0))
-        print (' '.join(sent1))
-        print(str(alignments) + '\n')
-
 
 def output_alignments(file, sentpairs, slug, all_alignments, debug=False):
     """
@@ -406,10 +363,10 @@ def output_alignments(file, sentpairs, slug, all_alignments, debug=False):
                  alignment.sent1.split(' ')[simple_only[0][1]]]]
 
         if debug:
-            print(slug + "\t" + str(alignment.ind0) + "\t" + str(
-                alignment.ind1))
-            print(alignment.sent0.split(' ')[complex_only[0][1]] + '\t' + str(complex_only[0][1]) + '\t' + alignment.sent0.rstrip('\n'))
-            print(alignment.sent1.split(' ')[simple_only[0][1]] + '\t' + str(simple_only[0][1]) + '\t' + alignment.sent1.rstrip('\n') + "\n")
+            # print(slug + "\t" + str(alignment.ind0) + "\t" + str(
+                # alignment.ind1))
+            # print(alignment.sent0.split(' ')[complex_only[0][1]] + '\t' + str(complex_only[0][1]) + '\t' + alignment.sent0.rstrip('\n'))
+            # print(alignment.sent1.split(' ')[simple_only[0][1]] + '\t' + str(simple_only[0][1]) + '\t' + alignment.sent1.rstrip('\n') + "\n")
             pass
         # file.write(slug + "\t" + str(alignment.ind0) + "\t" + str(
                 # alignment.ind1) + "\n")
@@ -447,7 +404,7 @@ if __name__ == "__main__":
     count = 0
     als = 0
     all_alignments = {}
-    with open("/home/nlp/newsela/ALIGNMENTS.txt", "w") as file:
+    with open("/home/nlp/wpred/datasets/native/alignments.txt", "w") as file:
         i = 0
         info = loadMetafile()
         nSlugs = 0
@@ -457,14 +414,14 @@ if __name__ == "__main__":
             artLow = i  # first article with this slug
             slug = info[i]['slug']
             nSlugs += 1
-            # if nToAlign == -1:
-                # print(
-                    # "Processing slug... " + slug + ' ' + str(round(i / float(len(info)) * 100, 3)) + '% of the task completed')
+            if nToAlign == -1:
+                print("Processing slug... " + slug + ' ' + str(round(i / float(len(info)) * 100, 3)) + '% of the task completed')
             while i < len(info) and slug == info[i]['slug']:
                 i += 1
             artHi = i  # one more than the number of the highest article with this slug
             for level in levels:
                 if level[1] < artHi - artLow:
+                    # print("Levels: " + str([level[0], level[1]]))
                     sentpairs = get_aligned_sentences(info, slug, level[0], level[1])
                     # output_alignments(file, sentpairs, slug + "\t" + "\t".join([str(x) for x in level]))
                     c, a = output_alignments(file, sentpairs, slug + "\t" + "\t".join([str(x) for x in level]), all_alignments, abs(level[0] - level[1]) != 1)
