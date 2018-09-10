@@ -5,7 +5,7 @@
 * newsela - the directory that contains texts from Newsela corpus in various formats. 
 The same directory houses data about alignments. See README.md inside the directory for details. 
 
-* googleNGrams - google ngrams. Year???
+* googleNGrams - Web 1T 5-gram Version 1 2006 (Google Inc.)
 
 * stanford-parser-full-2015-12-09 - is exactly what it says
 
