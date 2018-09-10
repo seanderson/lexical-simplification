@@ -1,4 +1,34 @@
-# Lexical siplification tools
+# Lexical simplification tools
+
+## List of files and directories
+
+* newsela - the directory that contains texts from Newsela corpus in various formats. 
+The same directory houses data about alignments. See README.md inside the directory for details. 
+
+* googleNGrams - google ngrams. Year???
+
+* stanford-parser-full-2015-12-09 - is exactly what it says
+
+* stanford-postagger - June 2018 Stanford postagger. Note: this is not the tagger used by to tag the text_databases.
+This tagger is used to tag the datasets.
+
+* lexicons - various lexicons to be used by generate_features.py. See README.md inside the directory for details.
+
+* datasets - the three main datasets used for the CWI and LEXSIMP tasks:
+    1. native - the data obtained from the alignments of teh newsela corpus
+    2. kriz - courtesy of Reno Kriz (see Simplification Using Paraphrases and Context-based Lexical Substitution)
+    3. cwi - data from the Complex Word Identification Shared Task 2018
+    
+* text_databases - various text databases that are used to create wor2vec representations of the words. See README.md
+inside the directory for details.
+
+* src - All the code except for the code for database processing and Stanford Corenlp utilities. See README.md inside the directory for details
+
+* word2vecmodels - models obtained from text_databases
+
+* .gitignore
+
+* README.md - this file
 
 ## Sentence alignment
 The repository contains a modified version of a sentence alignment algorithm described by Paetzold and Specia (2016). 

@@ -2,8 +2,10 @@
   globdefs.py:
   Global definitions used by numerous scripts.
 '''
-
+import sys
+sys.path.append('../')
 import nltk
+from lexenstein import util
 from nltk.corpus import stopwords
 STOPWORDS = sorted(stopwords.words('english'))
 
@@ -36,8 +38,8 @@ STANFORD_MODEL=STANFORD_POS_BASE + "models/english-bidirectional-distsim.tagger"
 STANFORD_JAR=STANFORD_POS_BASE+ "stanford-postagger.jar"
 
 
-DATA_METAFILE = "/home/nlp/corpora/text_databases/metafile.txt"
-VOCFILE = "/home/nlp/corpora/text_databases/voc.txt"
+DATA_METAFILE = "/home/nlp/wpred/text_databases/metafile.txt"
+VOCFILE = "/home/nlp/wpred/text_databases/voc.txt"
 VOC_HDR_WORD = "Word"
 VOC_HDR_TOTAL = "Total"
 
@@ -46,24 +48,7 @@ VOC_HDR_TOTAL = "Total"
 
 # Major word classes are reduced to single forms (see Paetzold, 2016)
 
-UTAG_MAP = {
-    'vb':'v',
-    'vbd':'v',
-    'vbg':'v',
-    'vbn':'v',
-    'vbp':'v',
-    'vbz':'v',
-    'nn':'n',
-    'nns':'n',
-    'nnp':'np',
-    'nnps':'np',
-    'jj':'j',
-    'jjr':'j',
-    'jjs':'j',
-    'r':'r',
-    'rbr':'r',
-    'rbs':'r'
-}
+UTAG_MAP = lambda x: util.getGeneralisedPOS(x)
 
 
 UPENN_TAGSET_FILE = 'help/tagsets/upenn_tagset.pickle'

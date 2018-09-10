@@ -14,7 +14,7 @@ import prepDataPOS as prepData
 MODEl_EXT = ".model"
 # For details see https://radimrehurek.com/gensim/models/word2vec.html
 SKIPGRAM = 0                # use CBOW
-EMBED_SIZE = 1300           # length of embedding vectors
+EMBED_SIZE = 200           # length of embedding vectors
 WINDOW = 5
 # maximum distance between the current and predicted word
 ALPHA = 0.01                 # The initial learning rate.
@@ -157,7 +157,7 @@ def evaluate(prefix, epochs):
             print(model.wv.evaluate_word_pairs(test_file))
             file.write(str(model.wv.evaluate_word_pairs(test_file)) + "\n")
 
-            for w in ['big_j', 'train_n', 'train_v']:
+            for w in ['big_J', 'train_N', 'train_V']:
                 lst = "\t".join([x[0] for x in model.wv.most_similar(positive=[w])])
                 print(w + ": " + lst)
                 file.write(w + ": " + lst + "\n")
@@ -165,3 +165,6 @@ def evaluate(prefix, epochs):
 
 if __name__ == "__main__":
     main()
+    # evaluate("/home/nlp/newsela/src/nn/cbow-2018-Jul-20-1837/", [0, 1, 2, 3, 4])
+    # model = word2vec.Word2Vec.load("/home/nlp/newsela/src/nn/cbow-2018-Jul-20-1837/epoch3.model")
+    # model.wv.save_word2vec_format("/home/nlp/newsela/src/nn/cbow-2018-Jul-20-1837/model.bin")

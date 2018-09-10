@@ -1,9 +1,9 @@
-from lexenstein.morphadorner import MorphAdornerToolkit  # for syllable count
+from src.lexenstein.morphadorner import MorphAdornerToolkit  # for syllable count
 import numpy
 import statistics
-import classpaths as paths
+from src import classpaths as paths
 from nltk.corpus import wordnet as wn
-from newsela_pos import *  # POS tagger
+from src.cwi.newsela_pos import *  # POS tagger
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import wordnet
 import gensim
@@ -11,16 +11,16 @@ import gensim
 
 Lemmatizer = WordNetLemmatizer()
 LEXICON = "/home/nlp/Lexicons/ALL.tsv"
-N_GRAM_DIRECTORY = "/home/nlp/corpora/n-grams/"
+N_GRAM_DIRECTORY = "/home/nlp/wpred/n-grams/"
 GOOGLE_NGRAM = "GOOGLE"
 SEW_NGRAM = "SEW"
-ORIGINAL_DATA = paths.NEWSELA_ALIGNED + "dataset_new.txt"
-CWI_DATA = "/home/nlp/corpora/cwi/traindevset/english/News_Dev.tsv"
+# ORIGINAL_DATA = paths.NEWSELA_ALIGNED + "dataset_new.txt"
+CWI_DATA = "/home/nlp/wpred/datasets/cwi/traindevset/english/News_Dev.tsv"
 # the data in "Chris" format, i.e. a line with tab-separated values:
 # word  ind score   sentence    substituition (the latter is optional)
-FEATURE_DIR = "/home/nlp/corpora/newsela_aligned/features_alternative2/"
+FEATURE_DIR = "/home/nlp/wpred/satasets/cwi/traindevset/english/News_Dev_Features/"
 # the directory to which all the numpy arrays will be stored
-EMB_MODEL = paths.NEWSELA_ALIGNED + "model.bin"
+EMB_MODEL = "/home/nlp/wpred/word2vecmodels/model.bin"
 # current model is trained with vectors of size 500, window = 5
 # alpha = 0.01, min_alpha = 1.0e-9, negative sampling = 5. The third epoch is
 # taken because it shows the best score on SimLex-999
@@ -588,7 +588,7 @@ def get_raw_data():
             line['sent'] = ' '.join(tmp)
     LOADIT = False
     if N_ALTERNATIVES > 0 and LOADIT:
-        with open(self.directory + "substitutions") as file:
+        with open(FEATURE_DIR + "substitutions") as file:
             subst = [re.sub(CustomFeatureEstimator.NON_ASCII, '', x.rstrip('\n')).split('\t')[:N_ALTERNATIVES] for x in file.readlines()]
         for i in range(len(subst)):
             for s in subst[i]:
@@ -648,7 +648,11 @@ def smart_lemmatize(word, treebank_tag):
 
 
 if __name__ == "__main__":
-    fe = CustomFeatureEstimator(["3-gram", "4-gram", "5-gram"])
+    fe = CustomFeatureEstimator(["POS", "hit", "sent_syllab", "word_syllab",
+                                 "word_count", "mean_word_length",
+                                 "synset_count", "synonym_count", "vowel_count",
+                                 "1-gram", "2-gram", "3-gram", "4-gram",
+                                 "5-gram", "labels"])
     # fe = CustomFeatureEstimator(["lexicon"])
     fe.calculate_features(get_cwi_data())
     exit(0)

@@ -26,12 +26,12 @@ def load_vocab(infile=VOCFILE, corpus=VOC_HDR_TOTAL):
 
 
 def fixtoken(token):
-    token = token.lower()
     try:
-        (word, pos) = token.split(POS_DELIM)
+        word, pos = token.split(POS_DELIM)
+        word = word.casefold()
     except:
         return WORD_UNKNOWN
-    newtoken = POS_DELIM.join((word.casefold(), UTAG_MAP.get(pos, pos)))
+    newtoken = POS_DELIM.join((word, UTAG_MAP(pos)))
     # print(token + " -> " + newtoken)
     return newtoken
 
@@ -49,7 +49,7 @@ def simplifyPOS(wfreq):
         except:
             numbadsplit += 1
             continue  # give up on bad token
-        newtag = UTAG_MAP.get(pos, pos)  # default to pos if not in UTAG_MAP
+        newtag = UTAG_MAP(pos)  # default to pos if not in UTAG_MAP
         newtoken = POS_DELIM.join((word.casefold(), newtag))
         wfreq_new[newtoken] = wfreq_new.get(newtoken,0) + wfreq[token]
     print("Num unique tokens %d\tNum bad-tokens %d\n" % (

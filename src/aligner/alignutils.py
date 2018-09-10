@@ -4,8 +4,8 @@ This modules contains utils for working with already aligned articles
 def get_aligned_sentences(metafile, slug, level1, level2, auto=True): Return aligned sentences..
 """
 
-from newselautil import *
-import classpaths as path
+from src.newselautil import *
+from src import classpaths as path
 import numpy
 import re
 # import utils_for_reno_kriz_data

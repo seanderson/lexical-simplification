@@ -1,13 +1,18 @@
-# Tokenize and Parse a bunch of newsela articles and write to stdout.
+# This is python wrapper around the Stanford tokenizer and parser
 
-import sys
 import newselautil as nsla
 import classpaths as path
-import StanfordParse
+import subprocess
 
-def all():
+
+MAX_LEVELS = 6  # maximum number of levels in the newsela corpus
+
+
+def process_all(method):
     """
-    tokenize all articles
+    Process all articles
+    :param method: the method to use to process the files.
+    Either tokenize or parse
     :return: None
     """
     articles = nsla.loadMetafile()
@@ -15,42 +20,65 @@ def all():
     # process articles by slug
     while i < len(articles):
         slug = articles[i]['slug']
-        NOfLevels = 1
-        while (i < len(articles))and(articles[i+1]['slug'] == slug):
-            NOfLevels += 1
+        n_of_levels = 1
+        while (i < len(articles) - 1) and (articles[i+1]['slug'] == slug):
+            n_of_levels += 1
             i += 1
-        processFile(slug, NOfLevels)
-        print ('Parsing:' + slug+' '+str(round(i/float(len(articles)), 5))+' of the task completed')
+        process_file(slug, method, n_of_levels)
+        print('Processed:' + slug + ' '+str(round(i/float(len(articles)), 5)) +
+              ' of the task completed')
         i += 1
 
-def particular(needed):
+
+def process_particular(slugs, method):
     """
-    tokenized files with specified slugs
-    :param needed: the list of slugs to tokenize
+    Process with specified slugs
+    :param slugs: the list of slugs to tokenize
+    :param method: the method to use to process the files
     :return: None
     """
-    for slug in needed:
-        processFile(slug)
+    for slug in slugs:
+        process_file(slug, method)
 
 
-def processFile(slug,numberOfLevels = 6):
+def process_file(slug, method, number_of_levels=6):
     """
-    tokenize the files with a given slug
+    Tokenize all the files with a given slug
     :param slug: the slug to tokenize
-    :param numberOfLevels: specified number of Levels to process
+    :param number_of_levels: number of levels for this slug
     :return: None
     """
-    for i in range(numberOfLevels):
-        try:
-            StanfordParse.tokenize(path.BASEDIR + '/articles/' + slug + ".en." + str(i) + ".txt")
-            with open(path.BASEDIR + '/articles/' + slug + ".en." + str(i) + ".txt.tok") as file:
-                lines = file.readlines()
-                for j in range(len(lines)):
-                    lines[j] = lines[j].replace("'", "`")
-            with open(path.BASEDIR + '/articles/' + slug + ".en." + str(i) + ".txt.tok", 'w') as file:
-                file.writelines(lines)
-        except:
-            print('ERROR while parsing %s' % (slug))
+    for i in range(number_of_levels):
+        filename = path.NEWSELA + '/articles/' + slug + ".en." + str(i) + ".txt"
+        if method == parse:
+            filename += ".tok"
+        result = method(filename)
+        if method == parse:
+            with open(filename + ".prs", "w") as file:
+                file.writelines(result.decode('utf8'))
+
+
+def parse(textfile):
+    """
+    Run parser and return the output as a string.
+    :param textfile: the name of the file to process
+    :return: None
+    """
+    output = subprocess.check_output(['java', '-cp', path.CLASSPATH,
+                                      '-Xmx8000m', path.PARSERPROG, path.MODELS,
+                                      textfile], shell=False)
+    return output
+
+
+def tokenize(textfile):
+    """
+    Run Stanford tokenizer. Output to textfile.tok
+    :param textfile: the name of the file to process
+    :return: None
+    """
+    subprocess.check_output(['java', '-cp', path.CLASSPATH, path.TOKENIZERPROG,
+                             textfile], shell=False)
+
 
 if __name__ == "__main__":
-    all()
+    process_all(tokenize)

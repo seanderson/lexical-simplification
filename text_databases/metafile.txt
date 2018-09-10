@@ -1,0 +1,5 @@
+/home/nlp/wpred/text_databases/Subtlex/metafile.txt
+/home/nlp/wpred/text_databases/UMBC_webbase/metafile.txt
+/home/nlp/wpred/text_databases/NewsCrawl/metafile.txt
+/home/nlp/wpred/text_databases/SubIMDB/metafile.txt
+/home/nlp/wpred/text_databases/KW_two_files/metafile.txt

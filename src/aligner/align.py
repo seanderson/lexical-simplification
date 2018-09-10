@@ -101,15 +101,14 @@ about the articles and process n slugs by comparing the levels as specified in t
 align_particular(slugs, levels = [(0, 1, 2), (1, 2, 2), (2, 3, 2), (3, 4, 2), (4, 5, 2)]):  Does the same as
 align_first_n but only for specified slugs
 """
-
-from newselautil import *  # the utils used for processing newsela articles.
-import classpaths as path  # info about where various source files are stored on this computer
+import sys
+from src.newselautil import *  # the utils used for processing newsela articles.
+from src import classpaths as path  # info about where various source files are stored on this computer
 import euclidean as eu  # the tool for iterating over increasing euclidean distance
 import alignutils as autils
 import math
 import numpy
 import copy
-import sys
 is_py2 = sys.version[0] == '2'
 if is_py2:
     import Queue as queue
@@ -1038,4 +1037,4 @@ if __name__ == "__main__":
     # align_particular(["cat-apathy"],[(0,3,2)])
     align_first_n(levels=[(0, 3, 3), (0, 1, 3), (0, 2, 3), (0, 4, 3), (1, 2, 3),
                           (1, 3, 3), (1, 4, 3), (2, 3, 3), (2, 4, 3),
-                          (3, 4, 3)])
+                          (3, 4, 3)], start="aviation-tooling")

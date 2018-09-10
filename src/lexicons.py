@@ -1,18 +1,11 @@
+"""
+The module that contains utilities for building and using the lexicons
+"""
+
+
 import sys
 import numpy
 from lexenstein.util import *
-
-"""UTAG_MAP = {  # map used when building a language model
-    'vb': 'v', 'vbd': 'v', 'vbg': 'v', 'vbn': 'v', 'vbp': 'v', 'vbz': 'v',
-    'nn': 'n', 'nns': 'n', 'nnp': 'np', 'nnps': 'np',
-    'jj': 'j', 'jjr': 'j', 'jjs': 'j',
-    'r': 'r', 'rbr': 'r', 'rbs': 'r', 'rb': 'rb',
-    'cc': 'cc', 'cd': 'cd', 'dt': 'dt', 'ex': 'ex', 'fw': 'fw', 'in': 'in',
-    'ls': 'ls', 'md': 'md', 'pdt': 'pdt', 'pos': 'pos', 'prp': 'prp',
-    'prp$': 'prp$', 'rp': 'rp', 'sym': 'sym', 'to': 'to', 'uh': 'uh',
-    'wdt': 'wdt', 'wp': 'wp', 'wp$': 'wp$', 'wrb': 'wrb', '.': '.', '``': '``',
-    '\'\'': '\'\''
-}"""
 
 UTAG_MAP = lambda x: getGeneralisedPOS(x)
 ANY_POS = ""  # for storing information about any POS
@@ -24,7 +17,7 @@ def build_ultimate_lexicon(ul, lexicon, n_of_lexicons, l_id, l_name):
     """
     Add words in lexicon to the ul (ultimate lexicon)
     :param ul:            the ultimate lexicon which is being built
-    :param lexicon:       the lines from which to build teh ul
+    :param lexicon:       the lines from which to build the ul
     :param n_of_lexicons: number of different lexicons used to build the ul
     :param l_id:          the index of this particular lexicon among these
     :param l_name:        the name of te hlexicon
@@ -39,10 +32,10 @@ def build_ultimate_lexicon(ul, lexicon, n_of_lexicons, l_id, l_name):
             exit(-1)
         word, tag = lexicon[i].rstrip('\n').split('\t')
         word = word.lower()
-        # if tag not in UTAG_MAP:
-            # print("Lexicon: " + l_name + ", line: " + str(i))
-            # print("Word " + word + " is marked with an unknown POS tag: " + tag)
-            # exit(-1)
+        """if tag not in UTAG_MAP:
+            print("Lexicon: " + l_name + ", line: " + str(i))
+            print("Word " + word + " is marked with an unknown POS tag: " + tag)
+            exit(-1)"""
         if word not in ul:
             n_unique_words += 1
             ul[word] = {}
@@ -123,7 +116,7 @@ def get_n_of_features(ul):
 if __name__ == "__main__":
     ul = {}  # ultimate lexicon
     if len(sys.argv) != 3:
-        print("please give (only) two argument: the name of the metafile with "
+        print("please give (only) two arguments: the name of the metafile with "
               "all the lexicons listed and the name of the file to write the "
               "ultimate lexicon to")
         exit(-1)

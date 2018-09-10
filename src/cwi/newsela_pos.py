@@ -4,8 +4,8 @@ Note: the function that should be used is "get_tags"
 """
 
 import re
-from lexenstein.util import getGeneralisedPOS
-import classpaths as path
+from src.lexenstein.util import getGeneralisedPOS
+from src import classpaths as path
 import subprocess
 
 PREFIX = "SasHKADGKJA"  # A string that should not appear in the text itself
@@ -19,7 +19,7 @@ def tag(textfile):
 
 def tag_data(lines):
     """
-    A function that tags the Chris data and adds special PREFIX to every new
+    A function that tags the Kriz data and adds special PREFIX to every new
     line so that the original order of lines can be preserved
     :return:
     """
