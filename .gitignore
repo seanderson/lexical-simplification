@@ -13,6 +13,7 @@ text_databases/Subtlex/*
 text_databases/SubIMDB/*
 text_databases/stanford-corenlp-full-2018-02-27/*
 text_databases/Kauchak*
+text_databases/voc*
 word2vecmodels/*
 .idea/
 *.DS_STORE

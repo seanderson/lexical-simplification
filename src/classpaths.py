@@ -22,6 +22,10 @@ CLASSPATH = ':'.join(['.', PARSERDIR, PARSERDIR + 'stanford-parser.jar',
                       PARSERDIR + 'slf4j-api.jar',
                       BASEDIR + '/stanford-postagger/stanford-postagger.jar'])
 
+N_GRAM_DIRECTORY = "/home/nlp/wpred/googleNGrams/"
+LEXICON = "/home/nlp/wpred/lexicons/ALL.tsv"
+SYLLABIFIER = "/home/nlp/wpred/ghpaetzold-MorphAdornerToolkit-44bb87d/" \
+              "SyllableSplitter/SyllableSplitter.jar"
 
 PREDICTIONS = BASEDIR + "/predictions/"
 NN_MODELS = BASEDIR + "/models/"

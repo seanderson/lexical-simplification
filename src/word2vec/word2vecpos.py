@@ -1,20 +1,21 @@
 """
 Uses gensim to create embedding vectors in which every word has its POS marked.
 """
+import math
 
 from gensim.models import word2vec
 from gensim.models.callbacks import CallbackAny2Vec
 import logging
 import pathlib
 import datetime
-from globdefs import *
-import prepDataPOS as prepData
+from src.word2vec.globdefs import *
+import src.word2vec.prepDataPOS as prepData
 
 
 MODEl_EXT = ".model"
 # For details see https://radimrehurek.com/gensim/models/word2vec.html
 SKIPGRAM = 0                # use CBOW
-EMBED_SIZE = 200           # length of embedding vectors
+EMBED_SIZE = 200            # length of embedding vectors
 WINDOW = 5
 # maximum distance between the current and predicted word
 ALPHA = 0.01                 # The initial learning rate.
@@ -128,7 +129,7 @@ def main(DATABASE=None):
                     for name in database_metafile:
                         flist.append(name.rstrip('\n'))
     else:
-        with open("/home/nlp/corpora/text_databases/"+DATABASE+"/metafile.txt") as \
+        with open("/home/nlp/wpred/text_databases/"+DATABASE+"/metafile.txt") as \
                 database_metafile:
                     for name in database_metafile:
                         flist.append(name.rstrip('\n'))
@@ -154,18 +155,31 @@ def evaluate(prefix, epochs):
             file.write("\nEpoch " + str(epoch) + ":\n")
             model = word2vec.Word2Vec.load(prefix + "epoch" + str(epoch) + MODEl_EXT)
 
-            test_file = "/home/nlp/newsela/src/nn/SimLex-999.tsv"
-            print(model.wv.evaluate_word_pairs(test_file))
-            file.write(str(model.wv.evaluate_word_pairs(test_file)) + "\n")
+            # test_file = "/home/nlp/newsela/src/nn/SimLex-999.tsv"
+            # print(model.wv.evaluate_word_pairs(test_file))
+            # file.write(str(model.wv.evaluate_word_pairs(test_file)) + "\n")
 
-            for w in ['big_J', 'train_N', 'train_V']:
-                lst = "\t".join([x[0] for x in model.wv.most_similar(positive=[w])])
-                print(w + ": " + lst)
-                file.write(w + ": " + lst + "\n")
+            lst = []
+
+            for w0 in ['train_N', 'train_V']:
+                lst += [x[0] for x in model.wv.most_similar(positive=[w0], topn=2)]
+
+            lst += ["create_V", "horse_N", "test_V", "test_N", "funny_J", "joke_V", 'train_N', 'train_V', 'once_A']
+
+            for w in lst:
+                sim0 = model.wv.similarity('train_N', w)
+                sim1 = model.wv.similarity('train_V', w)
+                """ x = sim0 / (sim0 + sim1)
+                if x > sim0:
+                    x = -x / (x - 1)
+                y = math.sqrt(sim0 * sim0 - x * x)"""
+                print(w, str(round(sim0, 2)), str(round(sim1, 2)))
 
 
 if __name__ == "__main__":
-    main()
-    # evaluate("/home/nlp/newsela/src/nn/cbow-2018-Jul-20-1837/", [0, 1, 2, 3, 4])
-    # model = word2vec.Word2Vec.load("/home/nlp/newsela/src/nn/cbow-2018-Jul-20-1837/epoch3.model")
+    # main()
+    evaluate("/home/nlp/wpred/word2vecmodels/cbow-2018-Sep-09-2223/", [1])
+    # model = word2vec.Word2Vec.load("/home/nlp/wpred/word2vecmodels/cbow-2018-Sep-09-2223/epoch0.model")
+    # model = word2vec.Word2VecKeyedVectors.load_word2vec_format("/home/nlp/wpred/word2vecmodels/cbow-2018-Sep-09-2223/model.bin")
+    # model.wv.save_word2vec_format("/home/nlp/wpred/word2vecmodels/cbow-2018-Sep-09-2223/model.bin")
     # model.wv.save_word2vec_format("/home/nlp/newsela/src/nn/cbow-2018-Jul-20-1837/model.bin")

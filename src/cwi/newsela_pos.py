@@ -4,7 +4,7 @@ Note: the function that should be used is "get_tags"
 """
 
 import re
-from src.lexenstein.util import getGeneralisedPOS
+from src.word2vec.globdefs import getGeneralisedPOS
 from src import classpaths as path
 import subprocess
 

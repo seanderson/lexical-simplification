@@ -404,9 +404,9 @@ if __name__ == "__main__":
     count = 0
     als = 0
     all_alignments = {}
+    info = loadMetafile()
     with open("/home/nlp/wpred/datasets/native/alignments.txt", "w") as file:
         i = 0
-        info = loadMetafile()
         nSlugs = 0
         nToAlign = -1
         levels = [(0, 1), (1, 2), (2, 3), (3, 4), (0, 3), (0, 4), (1, 3), (1, 4), (2, 4)]

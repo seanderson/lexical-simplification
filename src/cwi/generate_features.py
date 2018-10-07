@@ -1,31 +1,21 @@
-from src.lexenstein.morphadorner import MorphAdornerToolkit  # for syllable count
 import numpy
-import statistics
-from src import classpaths as paths
 from nltk.corpus import wordnet as wn
-from src.cwi.newsela_pos import *  # POS tagger
+from src.cwi.newsela_pos import *
 from nltk.stem import WordNetLemmatizer
-from nltk.corpus import wordnet
+from src.classpaths import *
 import gensim
 
 
 Lemmatizer = WordNetLemmatizer()
-LEXICON = "/home/nlp/Lexicons/ALL.tsv"
-N_GRAM_DIRECTORY = "/home/nlp/wpred/googleNGrams/"
 GOOGLE_NGRAM = "GOOGLE"
 SEW_NGRAM = "SEW"
-# ORIGINAL_DATA = paths.NEWSELA_ALIGNED + "dataset_new.txt"
-CWI_DATA = "/home/nlp/wpred/datasets/cwi/traindevset/english/News_Dev.tsv"
-# the data in "Chris" format, i.e. a line with tab-separated values:
-# word  ind score   sentence    substituition (the latter is optional)
-FEATURE_DIR = "/home/nlp/wpred/datasets/cwi/traindevset/english/News_Dev_Features/"
-# the directory to which all the numpy arrays will be stored
 EMB_MODEL = "/home/nlp/wpred/word2vecmodels/model.bin"
+model = None
 # current model is trained with vectors of size 500, window = 5
 # alpha = 0.01, min_alpha = 1.0e-9, negative sampling = 5. The third epoch is
 # taken because it shows the best score on SimLex-999
 EMB_SIZE = 500
-N_ALTERNATIVES = 0
+N_ALT = 0
 # the number of substitution candidates to add (the substitutions are chosen
 # from the nearest word vecors that bear the same POS tag). This constant should
 # be zero, if the document in question contains phrases
@@ -33,15 +23,6 @@ TOP_N = 20
 # the number of most-similar words to grab when looking for alternatives
 # Out of these only those words will be added to alternatives that have the same
 # POS tag as the target word
-
-"""
-ORIGINAL_DATA = \
-    paths.NEWSELA_COMPLEX + "Newsela_Complex_Words_Dataset_supplied.txt"
-self.directory = paths.NEWSELA_COMPLEX + "features/"
-EMB_MODEL = paths.NEWSELA_COMPLEX + "model.bin"
-EMB_SIZE = 500
-BINARY = lambda x: 0 if int(x) <= 3  else 1 
-"""
 
 
 class CustomFeatureEstimator:
@@ -59,7 +40,7 @@ class CustomFeatureEstimator:
     VOWEL_REGEX = re.compile(r'[AEIOUYaeiouy]')
     NON_ASCII = '[^\x00-\x7F]'
 
-    def __init__(self, feature_names, directory=FEATURE_DIR):
+    def __init__(self, feature_names, directory):
         """
         Creates an instance of the FeatureEstimator class.
         :param feature_names: the features to calculate when running
@@ -73,7 +54,7 @@ class CustomFeatureEstimator:
         # self.features is an array of features that will be used during this
         # particular run
 
-        if N_ALTERNATIVES > 0:
+        if N_ALT > 0:
             if feature_names[0] != 'wv' and (
                     feature_names[1] != 'wv' or feature_names[0] != 'POS'):
                 print('If alternatives are to be calculated, place POS and wv '
@@ -106,16 +87,18 @@ class CustomFeatureEstimator:
             "word_length": {"func": self.word_length_feature,"dep": []},
             "SEW_freq": {"func": lambda x: self.n_gram_feature(x, 1, src=SEW_NGRAM), "dep": []},
             "POS": {"func": self.pos_tag_feature, "dep": []},
+            # "POS_freq": {"func": self.pos_frequency, "dep": ["labels", "POS"]},
             "sent_syllab": {"func": self.sent_syllable_feature, "dep": []},
             "word_syllab": {"func": self.word_syllable_feature, "dep": []},
             "word_count": {"func": self.word_count_feature, "dep": []},
+            "punctuation": {"func": self.punctuation_feature, "dep": []},
             "mean_word_length": {"func": self.mean_word_length_feature,
-                                 "dep": []},
+                                 "dep": ["word_count"]},
             "synset_count": {"func": self.synset_count_feature, "dep": []},
             "synonym_count": {"func": self.synonym_count_feature, "dep": []},
             "labels": {"func": self.get_labels, "dep": []},
             "wv": {"func": self.word_embeddings_feature, "dep": ["POS"]},
-            "hit": {"func": self.hit_freqency_feature, "dep": []},
+            "hit": {"func": self.hit_freqency_feature, "dep": ["word_count"]},
             "1-gram": {"func": lambda x: self.n_gram_feature(x, 1), "dep": []},
             "2-gram": {"func": lambda x: self.n_gram_feature(x, 2), "dep": []},
             "3-gram": {"func": lambda x: self.n_gram_feature(x, 3), "dep": []},
@@ -138,6 +121,9 @@ class CustomFeatureEstimator:
             "indes" - their indexes within the sentence (if such exist)
         :return:
         """
+        global model
+        if "wv" in self.features:
+            model = gensim.models.word2vec.Word2VecKeyedVectors.load_word2vec_format(EMB_MODEL)
         for feature in self.features:
             print("Assessing " + feature["name"])
             self.results[feature["name"]] = feature["func"](data)
@@ -204,12 +190,28 @@ class CustomFeatureEstimator:
         result = []
         for i in range(len(data)):
             n_of_words = n_candidates[i]  # N of words in sent
-            result.append(numpy.zeros(N_ALTERNATIVES + 1))
+            result.append(numpy.zeros(N_ALT + 1))
             if n_of_words != 0:
                 for j in range(len(result[-1])):
                     result[-1][j] = output[ind + j]
             ind += n_of_words
         return result
+
+    """def pos_frequency(self, data):
+        pos_count = {}
+        pos_complex_count = {}
+        for i in range(len(data)):
+            if self.results['POS'][i][0] not in pos_count:
+                pos_count[self.results['POS'][i][0]] = 0
+                pos_complex_count[self.results['POS'][i][0]] = 0
+            pos_count[self.results['POS'][i][0]] += 1
+            if self.results['labels'][i][0] == 1:
+                pos_complex_count[self.results['POS'][i][0]] += 1
+        result = numpy.zeros(shape=(len(data), 1), dtype=numpy.float64)
+        for i in range(data):
+            result[i] = po 
+        return result"""
+
 
     def syllabify(self, list_of_words):
         """
@@ -218,10 +220,15 @@ class CustomFeatureEstimator:
         :param list_of_words:
         :return:
         """
-        mat = MorphAdornerToolkit(paths.MORPH_ADORNER_TOOLKIT)
-        out = mat.splitSyllables(list_of_words)
-        out = [o.decode("latin1").replace(' ', '-') for o in out]
-        return [len(o.split('-')) for o in out if len(o.strip()) > 0]
+
+        proc = subprocess.Popen(['java', '-jar', SYLLABIFIER], shell=False,
+                                stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE)
+        (out, err) = proc.communicate('\n'.join(list_of_words).encode("utf8"))
+        out = re.sub('\xc2\xad', '-', out.decode("utf8"))
+        out = out.strip().split('\n')
+        out = [re.sub(' ', '-', o) for o in out]
+        return [len(o.split('­')) for o in out if len(o.strip()) > 0]
 
     def word_length_feature(self, data):
         """
@@ -244,7 +251,15 @@ class CustomFeatureEstimator:
         :param data: See the entry for calculate_features
         :return:
         """
-        return [numpy.array([len(line['sent'].split(' '))]) for line in data]
+        return numpy.array([numpy.array([len([x for x in line['sent'].split(' ') if re.match('.*[a-zA-Z].*', x)])]) for line in data])
+
+    def punctuation_feature(self, data):
+        """
+        Count the number of words with extra signs to them in the sentence
+        :param data: See the entry for calculate_features
+        :return:
+        """
+        return numpy.array([numpy.array([len([x for x in line['sent'].split(' ') if re.match('.*[^a-zA-Z].*', x)])]) for line in data])
 
     def mean_word_length_feature(self, data):
         """
@@ -252,8 +267,8 @@ class CustomFeatureEstimator:
         :param data: See the entry for calculate_features
         :return:
         """
-        return [numpy.array([statistics.mean([len(x) for x in line['sent'].split(' ') if
-                          re.match('.*[a-zA-Z].*', x)])]) for line in data]
+        return [numpy.array([len(re.sub('[^a-zA-Z]', '', data[i]['sent'])) /
+                             self.results['word_count'][i][0]]) for i in range(len(data))]
 
     def synset_count_feature(self, data):
         """
@@ -264,7 +279,7 @@ class CustomFeatureEstimator:
         dict = {}
         result = []
         for line in data:
-            result.append(numpy.zeros(N_ALTERNATIVES + 1))
+            result.append(numpy.zeros(N_ALT + 1))
             for j in range(len(line['words'])):
                 word = line['words'][j].lower()
                 if word not in dict:
@@ -284,18 +299,22 @@ class CustomFeatureEstimator:
         dict = {}
         result = []
         for line in data:
-            result.append(numpy.zeros(N_ALTERNATIVES + 1))
+            result.append(numpy.zeros(N_ALT + 1))
             for j in range(len(line['words'])):
                 word = line['words'][j].lower()
                 if word not in dict:
+                    synonyms = {}
                     try:
                         senses = wn.synsets(word)
                     except UnicodeDecodeError:
                         senses = []
                     dict[word] = 0
                     for sense in senses:
-                        dict[word] += len(sense.lemmas())
-                        # TODO: is it the way to derive the number of synonyms?
+                        for lemma in sense.lemmas():
+                            lemma = re.sub('.*\.', '', str(lemma))
+                            if lemma not in synonyms:
+                                synonyms[lemma] = True
+                                dict[word] += 1
                 result[-1][j] = dict[word]
         return result
 
@@ -323,8 +342,7 @@ class CustomFeatureEstimator:
         :return:
         """
         result = []
-        model = gensim.models.KeyedVectors.load_word2vec_format(EMB_MODEL,
-                                                                binary=True)
+        # model = gensim.models.word2vec.Word2VecKeyedVectors.load_word2vec_format(EMB_MODEL)
         file = open(self.directory + 'substitutions', 'w')
         for i in range(len(data)):
             if data[i]['phrase']:
@@ -334,19 +352,19 @@ class CustomFeatureEstimator:
             target = data[i]['words'][0].lower() + '_' + tag
             result.append([])
             if target not in model.vocab:
-                result[-1].append(numpy.zeros(EMB_SIZE * (N_ALTERNATIVES + 1) + N_ALTERNATIVES))
+                result[-1].append(numpy.zeros(EMB_SIZE * (N_ALT + 1) + N_ALT))
                 file.write('\n')
             else:
                 if i % 100 == 0:  # Debugging progress
                     print(i)
                 result[-1].append(model[target])
-                if N_ALTERNATIVES > 0:  # in this case possible substitutions will be
+                if N_ALT > 0:  # in this case possible substitutions will be
                     # selected based on the topn most similar word vectors
                     closest = model.wv.most_similar(positive=[target], topn=TOP_N)
                     j = 0
                     ind = 0
-                    cosines = numpy.zeros(N_ALTERNATIVES)
-                    while j < len(closest) and ind < N_ALTERNATIVES:
+                    cosines = numpy.zeros(N_ALT)
+                    while j < len(closest) and ind < N_ALT:
                         substitution, cosine = closest[j]
                         substitution = substitution.split('_')
                         word = '_'.join(substitution[:-1])
@@ -363,7 +381,7 @@ class CustomFeatureEstimator:
                             ind += 1
                         j += 1
                     file.write('\n')
-                    while len(result[-1]) != N_ALTERNATIVES + 1:
+                    while len(result[-1]) != N_ALT + 1:
                         result[-1].append(numpy.zeros(EMB_SIZE))
                     result[-1].append(cosines)
             result[-1] = numpy.concatenate(result[-1])
@@ -375,13 +393,13 @@ class CustomFeatureEstimator:
         :param data:
         :return:
         """
-        if N_ALTERNATIVES > 0:
+        if N_ALT > 0:
             result = []
             for line in data:
                 if line['subst'] in line['words']:
                     result.append(line['words'].index(line['subst']))
                 else:
-                    result.append(N_ALTERNATIVES + 1)
+                    result.append(N_ALT + 1)
             return result
         return [line['score'] for line in data]
 
@@ -400,7 +418,7 @@ class CustomFeatureEstimator:
         :param n:
         :return:
         """
-        result = numpy.zeros((len(data), (N_ALTERNATIVES + 1) * n))
+        result = numpy.zeros((len(data), (N_ALT + 1) * n))
         dictionary = {}
         # dictionary of values that are to be looked up in the n-grams
         for i in range(len(data)):
@@ -485,7 +503,7 @@ class CustomFeatureEstimator:
         # a given hit_id
         result = []
         for i in range(len(data)):
-            result.append(numpy.zeros((N_ALTERNATIVES + 1) * 2))
+            result.append(numpy.zeros((N_ALT + 1) * 2))
             # result[i][j * 2] is the count of token[j] in lines with
             # hit_id = data[i]['hit']
             # result[i][j * 2 + 1] is the number of such lines
@@ -507,14 +525,18 @@ class CustomFeatureEstimator:
                     sents.append(data[line_id]['sent'])
                     for j in range(len(tokens)):
                         result[i][j * 2] += data[line_id]['sent'].lower().count(tokens[j])
-                        result[i][j * 2 + 1] += len(data[line_id]['sent'].split(' '))
+                        result[i][j * 2 + 1] += self.results['word_count'][line_id][0]
                 if not newsent or i == line_id:
                     continue
                 tmp = [x.lower() for x in data[line_id]['words'] + data[line_id]['phrase']]
                 for j in range(len(tmp)):
                     result[line_id][j * 2] += data[i]['sent'].lower().count(tmp[j])
-                    result[line_id][j * 2 + 1] += len(data[i]['sent'].split(' '))
-        return result
+                    result[line_id][j * 2 + 1] += self.results['word_count'][i][0]
+        final_result = numpy.zeros(shape=(len(data), N_ALT + 1), dtype=numpy.float64)
+        for i in range(len(final_result)):
+            for j in range(len(final_result[i])):
+                final_result[i][j] = result[i][j * 2] / result[i][j * 2 + 1]
+        return final_result
 
     def vowel_count_feature(self, data):
         """
@@ -524,7 +546,7 @@ class CustomFeatureEstimator:
         """
         result = []
         for i in range(len(data)):
-            result.append(numpy.zeros(N_ALTERNATIVES + 1))
+            result.append(numpy.zeros(N_ALT + 1))
             tokens = data[i]['words'] + data[i]['phrase']
             for j in range(len(tokens)):
                 result[-1][j] = len(self.VOWEL_REGEX.findall(tokens[j]))
@@ -544,7 +566,7 @@ class CustomFeatureEstimator:
         result = []
         for i in range(len(data)):
             line = data[i]
-            result.append(numpy.zeros((N_ALTERNATIVES + 1) * 2 * size))
+            result.append(numpy.zeros((N_ALT + 1) * 2 * size))
             for j in range(len(line['words'])):
                 word = line['words'][j].lower()
                 tag = self.NUM_TO_TAG[self.results['POS'][i][0]]
@@ -565,12 +587,12 @@ class CustomFeatureEstimator:
         return result
 
 
-def get_raw_data():
+def get_raw_data(filename):
     """
     Load the raw data (in Chris format) in memory
     :return:
     """
-    with open(ORIGINAL_DATA) as file:
+    with open(filename) as file:
         lines = file.readlines()
     lines = [re.sub(CustomFeatureEstimator.NON_ASCII, '', line.rstrip('\n')).split('\t') for line in lines]
     lines = [{'words': [x[0]], 'sent': x[3], 'inds': [int(x[1])],
@@ -587,9 +609,9 @@ def get_raw_data():
             del tmp[bad_id]
             line['sent'] = ' '.join(tmp)
     LOADIT = False
-    if N_ALTERNATIVES > 0 and LOADIT:
-        with open(FEATURE_DIR + "substitutions") as file:
-            subst = [re.sub(CustomFeatureEstimator.NON_ASCII, '', x.rstrip('\n')).split('\t')[:N_ALTERNATIVES] for x in file.readlines()]
+    if N_ALT > 0 and LOADIT:
+        with open( + "substitutions") as file:
+            subst = [re.sub(CustomFeatureEstimator.NON_ASCII, '', x.rstrip('\n')).split('\t')[:N_ALT] for x in file.readlines()]
         for i in range(len(subst)):
             for s in subst[i]:
                 if s != "":
@@ -598,7 +620,7 @@ def get_raw_data():
     return lines
 
 
-def get_cwi_data(cwi_file=CWI_DATA):
+def get_cwi_data(cwi_file):
     """
     Load the data (in CWI Semeval format) into memory
     :return:
@@ -636,52 +658,84 @@ def smart_lemmatize(word, treebank_tag):
     if word == "":
         return word
     if treebank_tag.startswith('J'):
-        return Lemmatizer.lemmatize(word, wordnet.ADJ)
+        return Lemmatizer.lemmatize(word, wn.ADJ)
     elif treebank_tag.startswith('V'):
-        return Lemmatizer.lemmatize(word, wordnet.VERB)
+        return Lemmatizer.lemmatize(word, wn.VERB)
     elif treebank_tag.startswith('N'):
-        return Lemmatizer.lemmatize(word, wordnet.NOUN)
+        return Lemmatizer.lemmatize(word, wn.NOUN)
     elif treebank_tag.startswith('A'):
-        return Lemmatizer.lemmatize(word, wordnet.ADV)
+        return Lemmatizer.lemmatize(word, wn.ADV)
     else:
         return word
 
 
-if __name__ == "__main__":
-    fe = CustomFeatureEstimator(["POS", "hit", "sent_syllab", "word_syllab",
-                                 "word_count", "mean_word_length",
-                                 "synset_count", "synonym_count", "vowel_count",
-                                 "1-gram", "2-gram", "3-gram", "4-gram",
-                                 "5-gram", "wv", "labels"])
-    # fe = CustomFeatureEstimator(["lexicon"])
-    fe.calculate_features(get_cwi_data())
-    exit(0)
+def report(filename, directory, to_print=100):
+    """
+    Print a sample of features for different words
+    :return:
+    """
+    feature_names = ["POS", "hit", "sent_syllab", "word_length",
+                                 "word_syllab", "word_count", "punctuation",
+                                 "mean_word_length", "synset_count",
+                                 "synonym_count", "vowel_count", "1-gram",
+                                 "2-gram", "3-gram", "4-gram", "5-gram",
+                                 "lexicon", "wv", "labels"]
+    feature_sizes = [N_ALT + 1, N_ALT + 1, 1, N_ALT + 1, N_ALT + 1, 1, 1, 1,
+                     N_ALT + 1, N_ALT + 1, N_ALT + 1, N_ALT + 1, 2 * N_ALT + 2,
+                     3 * N_ALT + 3, 4 * N_ALT + 4, 5 * N_ALT + 5, 20, 20]
+    fe = CustomFeatureEstimator(feature_names, directory)
     features = fe.load_features()
     labels = fe.load_labels()
-    data = get_cwi_data()
+    data = get_cwi_data(filename)
     if len(data) != len(features):
         exit(-1)
-    for i in range(100):
-        line = data[i]
-        print('\n')
-        print(data[i]['sent'] + '\t' + str(data[i]['phrase']))
-        print(str(data[i]['words']))
-        # print(data[i]['subst'])
-        print("POS: " + CustomFeatureEstimator.NUM_TO_TAG[features[i][0]])
-        print("hit: " + str(features[i][1:1 + 2 * (N_ALTERNATIVES + 1)]))
-        print("sent_syllab: " + str(features[i][1 + 2 * (N_ALTERNATIVES + 1)]))
-        print("word_syllab: " + str(features[i][2 + 2 * (N_ALTERNATIVES + 1):2 + 3 * (N_ALTERNATIVES + 1)]))
-        print("word_count: " + str(features[i][2 + 3 * (N_ALTERNATIVES + 1)]))
-        print("mean_word_length: " + str(features[i][3 + 3 * (N_ALTERNATIVES + 1)]))
-        print("synset_count: " + str(features[i][4 + 3 * (N_ALTERNATIVES + 1):4 + 4 * (N_ALTERNATIVES + 1)]))
-        print("synonym_count: " + str(features[i][4 + 4 * (N_ALTERNATIVES + 1):4 + 5 * (N_ALTERNATIVES + 1)]))
-        print("vowel_count: " + str(features[i][4 + 5 * (N_ALTERNATIVES + 1):4 + 6 * (N_ALTERNATIVES + 1)]))
-        print("1-gram: " + str(features[i][4 + 6 * (N_ALTERNATIVES + 1):4 + 7 * (N_ALTERNATIVES + 1)]))
-        print("2-gram: " + str(features[i][4 + 7 * (N_ALTERNATIVES + 1):4 + 9 * (N_ALTERNATIVES + 1)]))
-        print("3-gram: " + str(features[i][4 + 9 * (N_ALTERNATIVES + 1):4 + 12 * (N_ALTERNATIVES + 1)]))
-        print("4-gram: " + str(features[i][4 + 12 * (N_ALTERNATIVES + 1):4 + 16 * (N_ALTERNATIVES + 1)]))
-        print("5-gram: " + str(features[i][4 + 16 * (N_ALTERNATIVES + 1):4 + 21 * (N_ALTERNATIVES + 1)]))
-        if N_ALTERNATIVES > 0:
-            print("cosines: " + str(features[i][-N_ALTERNATIVES:]))
-        print("wv: " + str(features[i][4 + 21 * (N_ALTERNATIVES + 1):4 + 521 * (N_ALTERNATIVES + 1)]))
-        print("label: " + str(labels[i]))
+    for i in range(to_print):
+        print(data[i]['sent'] + '\n' + str(data[i]['phrase']) + str(data[i]['words']))
+        ind = 0
+        for j, feature in enumerate(feature_names):
+            if feature == "labels":
+                break
+            print(feature + ": " + str(features[i][ind: ind + feature_sizes[j]]))
+            ind += feature_sizes[j]
+        print('label: ' + str(labels[i]) + '\n')
+
+
+def create_features():
+    originals = ["traindevset/english/News_Dev.tsv",
+                     "traindevset/english/WikiNews_Dev.tsv",
+                     "traindevset/english/Wikipedia_Dev.tsv",
+                     "traindevset/english/News_Train.tsv",
+                     "traindevset/english/WikiNews_Train.tsv",
+                     "traindevset/english/Wikipedia_Train.tsv",
+                     "testset/english/News_Test.tsv",
+                     "testset/english/WikiNews_Test.tsv",
+                     "testset/english/Wikipedia_Test.tsv"]
+    folders = ["traindevset/english/News_Dev_Features/",
+                     "traindevset/english/WikiNews_Dev_Features/",
+                     "traindevset/english/Wikipedia_Dev_Features/",
+                     "traindevset/english/News_Train_Features/",
+                     "traindevset/english/WikiNews_Train_Features/",
+                     "traindevset/english/Wikipedia_Train_Features/",
+                     "testset/english/News_Test_Features/",
+                     "testset/english/WikiNews_Test_Features/",
+                     "testset/english/Wikipedia_Test_Features/"]
+    for i in range(len(originals)):
+        fe = CustomFeatureEstimator(["word_syllab", "sent_syllab"], "/home/nlp/wpred/datasets/cwi/" + folders[i])
+        # fe = CustomFeatureEstimator(["lexicon"])
+        fe.calculate_features(get_cwi_data("/home/nlp/wpred/datasets/cwi/" + originals[i]))
+    """fe = CustomFeatureEstimator(["POS", "word_length", "wv", "word_syllab",
+                                 "sent_syllab", "lexicon", "vowel_count",
+                                 "word_count", "punctuation", "mean_word_length",
+                                 "labels", "synonym_count", "synset_count",
+                                 "1-gram", "2-gram", "3-gram", "4-gram",
+                                 "5-gram"],
+                                "/home/nlp/wpred/datasets/native/")
+    # fe = CustomFeatureEstimator(["lexicon"])
+    fe.calculate_features(
+        get_raw_data("/home/nlp/wpred/datasets/native/dataset.txt"))"""
+
+
+if __name__ == "__main__":
+    create_features()
+    report("/home/nlp/wpred/datasets/cwi/traindevset/english/News_Train.tsv",
+          "/home/nlp/wpred/datasets/cwi/traindevset/english/News_Train_Features/")

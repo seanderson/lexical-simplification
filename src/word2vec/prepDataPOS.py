@@ -4,7 +4,7 @@ Prepare several corpora found in nlp:corpora/text_databases for
 input to gensim/word2vec, which is used to create embedding vectors.
 """
 
-from globdefs import *
+from src.word2vec.globdefs import *
 import csv
 from gensim.models import Word2Vec
 
@@ -31,7 +31,7 @@ def fixtoken(token):
         word = word.casefold()
     except:
         return WORD_UNKNOWN
-    newtoken = POS_DELIM.join((word, UTAG_MAP(pos)))
+    newtoken = POS_DELIM.join((word, getGeneralisedPOS(pos)))
     # print(token + " -> " + newtoken)
     return newtoken
 
@@ -49,7 +49,7 @@ def simplifyPOS(wfreq):
         except:
             numbadsplit += 1
             continue  # give up on bad token
-        newtag = UTAG_MAP(pos)  # default to pos if not in UTAG_MAP
+        newtag = getGeneralisedPOS(pos)  # default to pos if not in UTAG_MAP
         newtoken = POS_DELIM.join((word.casefold(), newtag))
         wfreq_new[newtoken] = wfreq_new.get(newtoken,0) + wfreq[token]
     print("Num unique tokens %d\tNum bad-tokens %d\n" % (
@@ -67,7 +67,7 @@ def build_lexicon(model,infile=VOCFILE,corpus=VOC_HDR_TOTAL):
 def main():
     model = Word2Vec(sorted_vocab=1,min_count=10)
     # Create and save vocabulary
-    build_lexicon(model, corpus=VOC_HDR_SUBTLEX)
+    build_lexicon(model, corpus=VOC_HDR_TOTAL)
     print("voc size %d\n" % len(model.wv.vocab))
     model.save(MODEL_FILE)
 
