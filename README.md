@@ -5,17 +5,17 @@
 * newsela - the directory that contains texts from Newsela corpus in various formats. 
 The same directory houses data about alignments. See README.md inside the directory for details. 
 
-* googleNGrams - google ngrams. Year???
+* googleNGrams - Web 1T 5-gram Version 1 2006 (Google Inc.)
 
 * stanford-parser-full-2015-12-09 - is exactly what it says
 
-* stanford-postagger - June 2018 Stanford postagger. Note: this is not the tagger used by to tag the text_databases.
+* stanford-postagger - June 2018 Stanford postagger. Note: this is not the tagger used to tag the text_databases.
 This tagger is used to tag the datasets.
 
 * lexicons - various lexicons to be used by generate_features.py. See README.md inside the directory for details.
 
 * datasets - the three main datasets used for the CWI and LEXSIMP tasks:
-    1. native - the data obtained from the alignments of teh newsela corpus
+    1. native - the data obtained from the alignments of the newsela corpus
     2. kriz - courtesy of Reno Kriz (see Simplification Using Paraphrases and Context-based Lexical Substitution)
     3. cwi - data from the Complex Word Identification Shared Task 2018
     
