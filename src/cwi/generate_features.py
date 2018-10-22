@@ -3,13 +3,15 @@ from nltk.corpus import wordnet as wn
 from src.cwi.newsela_pos import *
 from nltk.stem import WordNetLemmatizer
 from src.classpaths import *
+from src.word2vec.word2vecpos import EpochSaver
 import gensim
 
 
 Lemmatizer = WordNetLemmatizer()
 GOOGLE_NGRAM = "GOOGLE"
 SEW_NGRAM = "SEW"
-EMB_MODEL = "/home/nlp/wpred/word2vecmodels/model.bin"
+# EMB_MODEL = "/home/nlp/wpred/word2vecmodels/model.bin"
+EMB_MODEL = "/home/nlp/wpred/word2vecmodels/cbow-2018-Sep-09-2223/epoch1.model"
 model = None
 # current model is trained with vectors of size 500, window = 5
 # alpha = 0.01, min_alpha = 1.0e-9, negative sampling = 5. The third epoch is
@@ -24,17 +26,22 @@ TOP_N = 20
 # Out of these only those words will be added to alternatives that have the same
 # POS tag as the target word
 
+WV_COSINES_TOP_N = 10
+MAX_WORDS_PER_SENTENCE = 200  # used inside the POS_ALL feature
+
 
 class CustomFeatureEstimator:
 
     TAG_TO_NUM = {'A': 5, 'MD': 2, 'PDT': 9, 'RP': 8, 'IN': 6, '-RRB-': 7,
                   'CC': 11, 'LS': 17, 'J': 3, 'SYM': 18, 'N': 1, 'P': 12,
                   'UH': 16, 'W': 15, 'V': 19, '-LRB-': 13, 'DT': 10, 'CD': 4,
-                  'FW': 14, 'PHRASE': 0}
+                  'FW': 14, 'PHRASE': 0, '.': 21, 'TO': 22, ',': 20}
     NUM_TO_TAG = {0: 'PHRASE', 1: 'N', 2: 'MD', 3: 'J', 4: 'CD', 5: 'A',
                   6: 'IN', 7: '-RRB-', 8: 'RP', 9: 'PDT', 10: 'DT', 11: 'CC',
                   12: 'P', 13: '-LRB-', 14: 'FW', 15: 'W', 16: 'UH', 17: 'LS',
-                  18: 'SYM', 19: 'V'}
+                  18: 'SYM', 19: 'V', 20: ',', 21: '.', 22: 'TO'}
+
+    NUMBER_OF_POS_TAGS = len(TAG_TO_NUM.keys())
 
     VOWELS = ['a', 'e', 'i', 'o', 'u', 'y', 'A', 'E', 'I', 'O', 'U', 'Y']
     VOWEL_REGEX = re.compile(r'[AEIOUYaeiouy]')
@@ -61,21 +68,6 @@ class CustomFeatureEstimator:
                       'in the beginning')
                 exit(0)
 
-        for i in range(len(self.features)):
-            for dependency in self.features[i]['dep']:
-                # some features require that another feature is executed
-                # beforehand (e.g. word vectors need to know the POS tags)
-                if dependency not in [x['name'] for x in self.features[:i]]:
-                    print("Feature " + dependency +
-                          " should come before feature " +
-                          self.features[i]['name'])
-                    try:
-                        self.results[dependency] = \
-                            numpy.load(self.directory + dependency + '.npy')
-                    except:
-                        exit(-1)
-                    print("A saved version of the former is loaded from a file")
-
     def fill_all_features(self):
         """
         Create the "all_features" dictionary that can be used to look up feature
@@ -86,8 +78,7 @@ class CustomFeatureEstimator:
             "probs": {"func": self.get_probs, "dep": []},
             "word_length": {"func": self.word_length_feature,"dep": []},
             "SEW_freq": {"func": lambda x: self.n_gram_feature(x, 1, src=SEW_NGRAM), "dep": []},
-            "POS": {"func": self.pos_tag_feature, "dep": []},
-            # "POS_freq": {"func": self.pos_frequency, "dep": ["labels", "POS"]},
+            "POS": {"func": self.pos_tag_feature, "dep": ["POS_ALL"]},
             "sent_syllab": {"func": self.sent_syllable_feature, "dep": []},
             "word_syllab": {"func": self.word_syllable_feature, "dep": []},
             "word_count": {"func": self.word_count_feature, "dep": []},
@@ -105,7 +96,10 @@ class CustomFeatureEstimator:
             "4-gram": {"func": lambda x: self.n_gram_feature(x, 4), "dep": []},
             "5-gram": {"func": lambda x: self.n_gram_feature(x, 5), "dep": []},
             "vowel_count": {"func": self.vowel_count_feature, "dep": []},
-            "lexicon": {"func": self.lexicon_feature, "dep": ["POS"]}
+            "lexicon": {"func": self.lexicon_feature, "dep": ["POS"]},
+            "wv_cosines": {"func": self.wv_cosines_feature, "dep": ["POS_ALL"]},
+            "POS_ALL": {"func": self.tag_everything, "dep": []},
+            "is_a_phrase": {"func": self.is_a_phrase, "dep": []}
         }
         for key in self.all_features:
             self.all_features[key]["name"] = key
@@ -121,9 +115,25 @@ class CustomFeatureEstimator:
             "indes" - their indexes within the sentence (if such exist)
         :return:
         """
+        for i in range(len(self.features)):
+            for dependency in self.features[i]['dep']:
+                # some features require that another feature is executed
+                # beforehand (e.g. word vectors need to know the POS tags)
+                if dependency not in [x['name'] for x in self.features[:i]]:
+                    print("Feature " + dependency +
+                          " should come before feature " +
+                          self.features[i]['name'])
+                    try:
+                        self.results[dependency] = \
+                            numpy.load(self.directory + dependency + '.npy')
+                    except:
+                        exit(-1)
+                    print("A saved version of the former is loaded from a file")
         global model
-        if "wv" in self.features:
-            model = gensim.models.word2vec.Word2VecKeyedVectors.load_word2vec_format(EMB_MODEL)
+        names = [x['name'] for x in self.features]
+        if "wv" in names or "wv_cosines" in names:
+            # model = gensim.models.word2vec.Word2VecKeyedVectors.load_word2vec_format(EMB_MODEL)
+            model = gensim.models.word2vec.Word2Vec.load(EMB_MODEL)
         for feature in self.features:
             print("Assessing " + feature["name"])
             self.results[feature["name"]] = feature["func"](data)
@@ -131,7 +141,7 @@ class CustomFeatureEstimator:
                        numpy.array(self.results[feature["name"]]))
         print('Done')
 
-    def load_features(self):
+    def load_features(self, phrase_features=False, data=None):
         """
         Simply loads all the specified features from corresponding files
         :return: a numpy matrix
@@ -144,7 +154,45 @@ class CustomFeatureEstimator:
                 continue
             result.append(numpy.load(self.directory + feature["name"] + ".npy"))
         result = numpy.concatenate(result, axis=1)
+        if phrase_features:
+            if data is None:
+                print("Provide the data!")
+                exit(-1)
+            self.create_phrase_features(result, data)
         return result
+
+    def create_phrase_features(self, result, data):
+        """
+        Makes phrase features by averaging the word features for words that
+        constitute parts of the phrase
+        :param result:
+        :param data:
+        :return:
+        """
+        i = 0
+        while i < len(data):
+            j = i
+            word_ids = {}  # indexes of features for particular words
+            phrases_ids = []  # indexes of phrases
+            while j < len(data) and data[i]['sent'] == data[j]['sent']:
+                if data[j]['phrase']:
+                    phrases_ids.append(j)
+                else:
+                    word_ids[data[j]['words'][0]] = j
+                    # TODO: what if teh same word appears twice in a sentence?
+                j += 1
+            for phrase in phrases_ids:
+                words = data[phrase]['phrase'][0].split(' ')
+                new_features = numpy.zeros(shape=len(result[phrase]))
+                for word in words:
+                    if word not in word_ids:
+                        # TODO
+                        continue
+                    new_features += result[word_ids[word]] / len(words)
+                for k in range(len(result[phrase])):
+                    if result[phrase][k] == 0:
+                        result[phrase][k] = new_features[k]
+            i = j
 
     def load_labels(self):
         """
@@ -152,6 +200,15 @@ class CustomFeatureEstimator:
         :return:
         """
         return numpy.load(self.directory + "labels.npy")
+
+    def is_a_phrase(self, data):
+        result = []
+        for i, line in enumerate(data):
+            if line['phrase']:
+                result.append(numpy.array([1]))
+            else:
+                result.append(numpy.array([0]))
+        return result
 
     def sent_syllable_feature(self, data):
         """
@@ -196,22 +253,6 @@ class CustomFeatureEstimator:
                     result[-1][j] = output[ind + j]
             ind += n_of_words
         return result
-
-    """def pos_frequency(self, data):
-        pos_count = {}
-        pos_complex_count = {}
-        for i in range(len(data)):
-            if self.results['POS'][i][0] not in pos_count:
-                pos_count[self.results['POS'][i][0]] = 0
-                pos_complex_count[self.results['POS'][i][0]] = 0
-            pos_count[self.results['POS'][i][0]] += 1
-            if self.results['labels'][i][0] == 1:
-                pos_complex_count[self.results['POS'][i][0]] += 1
-        result = numpy.zeros(shape=(len(data), 1), dtype=numpy.float64)
-        for i in range(data):
-            result[i] = po 
-        return result"""
-
 
     def syllabify(self, list_of_words):
         """
@@ -318,21 +359,38 @@ class CustomFeatureEstimator:
                 result[-1][j] = dict[word]
         return result
 
-    def pos_tag_feature(self, data):
+    def tag_everything(self, data):
         """
-        Find out the POS tag of each target word that is in the sentence
-        :param data:  See the entry for calculate_features
+        Find out POS tags of every word in the sentence and also of every
+        target word
+        :param data:
         :return:
         """
         tags = get_tags(data)
         result = []
-        next_id = len(self.TAG_TO_NUM) + 1
-        for tag in tags:
-            if tag not in self.TAG_TO_NUM:
-                self.TAG_TO_NUM[tag] = next_id
-                self.NUM_TO_TAG[next_id] = tag
-                next_id += 1
-            result.append(numpy.array([self.TAG_TO_NUM[tag]]))
+        for i, line in enumerate(data):
+            result.append(numpy.zeros(MAX_WORDS_PER_SENTENCE))
+            for j, tag in enumerate(tags[i]):
+                if tag not in self.TAG_TO_NUM:
+                    # print("Unknown tag: " + tag)
+                    result[-1][j] = self.NUMBER_OF_POS_TAGS
+                else:
+                    result[-1][j] = self.TAG_TO_NUM[tag]
+        return result
+
+    def pos_tag_feature(self, data):
+        """
+        Find out the POS tag of the target word
+        :param data:  See the entry for calculate_features
+        :return:
+        """
+        result = []
+        for i, line in enumerate(data):
+            result.append(numpy.zeros(shape=self.NUMBER_OF_POS_TAGS + 1))
+            if line['phrase']:
+                result[-1][self.TAG_TO_NUM['PHRASE']] = 1
+                continue
+            result[-1][int(self.results['POS_ALL'][i][len(line['sent'].split(' '))])] = 1
         return result
 
     def word_embeddings_feature(self, data):
@@ -342,11 +400,13 @@ class CustomFeatureEstimator:
         :return:
         """
         result = []
-        # model = gensim.models.word2vec.Word2VecKeyedVectors.load_word2vec_format(EMB_MODEL)
         file = open(self.directory + 'substitutions', 'w')
         for i in range(len(data)):
             if data[i]['phrase']:
                 result.append(numpy.zeros(EMB_SIZE))
+                continue
+            if self.results['POS'][i][0] not in self.NUM_TO_TAG:
+                print("Problem")
                 continue
             tag = self.NUM_TO_TAG[self.results['POS'][i][0]]
             target = data[i]['words'][0].lower() + '_' + tag
@@ -385,6 +445,55 @@ class CustomFeatureEstimator:
                         result[-1].append(numpy.zeros(EMB_SIZE))
                     result[-1].append(cosines)
             result[-1] = numpy.concatenate(result[-1])
+        return result
+
+    def wv_cosines_feature(self, data):
+        """
+        Use word2vec model to predict the target word and then calculate the
+        cosines betweeen the taget word and teh TOPN predictions. Finally, store
+        the average of these cosines and their maximum
+        :param data:
+        :return:
+        """
+        result = []
+        for i, line in enumerate(data):
+            if i % 200 == 0:
+                print(i)
+            curr = numpy.zeros(2 * (N_ALT + 1))
+            if line['phrase']:
+                result.append(curr)
+                continue
+            for j, word in enumerate(line['words']):
+                tag_id = self.results['POS_ALL'][i][len(line['sent'].split(' '))]
+                if tag_id not in self.NUM_TO_TAG:
+                    continue
+                target = word.lower() + '_' + self.NUM_TO_TAG[tag_id]
+                if target not in model.wv.vocab:
+                    continue
+                context = []
+                for k in range(len(line['sent'].split(' '))):
+                    if k != line['inds'][j] and line['sent'].split(' ')[k] != word:
+                        curr_word = line['sent'].split(' ')[k].lower()
+                        if self.results['POS_ALL'][i][k] not in self.NUM_TO_TAG:
+                            continue
+                        curr_tag = self.NUM_TO_TAG[self.results['POS_ALL'][i][k]]
+                        if curr_word + '_' + curr_tag in model.wv.vocab:
+                            context.append(curr_word + '_' + curr_tag)
+                predictions = model.predict_output_word(context, topn=TOP_N)
+                if predictions is None:
+                    print(target, line['sent'])
+                    continue
+                topN = [x[0] for x in predictions]
+                max = 0
+                sum = 0
+                for entry in topN:
+                    cosine = model.wv.similarity(entry, target)
+                    if cosine > max:
+                        max = cosine
+                    sum += cosine
+                curr[2 * j] = max
+                curr[2 * j + 1] = sum / len(topN)
+            result.append(curr)
         return result
 
     def get_labels(self, data):
@@ -569,6 +678,8 @@ class CustomFeatureEstimator:
             result.append(numpy.zeros((N_ALT + 1) * 2 * size))
             for j in range(len(line['words'])):
                 word = line['words'][j].lower()
+                if self.results['POS'][i][0] not in self.NUM_TO_TAG:
+                    continue
                 tag = self.NUM_TO_TAG[self.results['POS'][i][0]]
 
                 if word + '_' + tag in lex:
@@ -610,7 +721,7 @@ def get_raw_data(filename):
             line['sent'] = ' '.join(tmp)
     LOADIT = False
     if N_ALT > 0 and LOADIT:
-        with open( + "substitutions") as file:
+        with open("substitutions") as file:
             subst = [re.sub(CustomFeatureEstimator.NON_ASCII, '', x.rstrip('\n')).split('\t')[:N_ALT] for x in file.readlines()]
         for i in range(len(subst)):
             for s in subst[i]:
@@ -674,19 +785,20 @@ def report(filename, directory, to_print=100):
     Print a sample of features for different words
     :return:
     """
-    feature_names = ["POS", "hit", "sent_syllab", "word_length",
+    feature_names = ["POS_ALL", "POS", "is_a_phrase", "hit", "sent_syllab", "word_length",
                                  "word_syllab", "word_count", "punctuation",
                                  "mean_word_length", "synset_count",
                                  "synonym_count", "vowel_count", "1-gram",
                                  "2-gram", "3-gram", "4-gram", "5-gram",
-                                 "lexicon", "wv", "labels"]
-    feature_sizes = [N_ALT + 1, N_ALT + 1, 1, N_ALT + 1, N_ALT + 1, 1, 1, 1,
+                                 "lexicon", "wv_cosines",  "wv", "labels"]
+    feature_sizes = [MAX_WORDS_PER_SENTENCE, (N_ALT + 1) * (CustomFeatureEstimator.NUMBER_OF_POS_TAGS + 1),
+                     1, N_ALT + 1, 1, N_ALT + 1, N_ALT + 1, 1, 1, 1,
                      N_ALT + 1, N_ALT + 1, N_ALT + 1, N_ALT + 1, 2 * N_ALT + 2,
-                     3 * N_ALT + 3, 4 * N_ALT + 4, 5 * N_ALT + 5, 20, 20]
+                     3 * N_ALT + 3, 4 * N_ALT + 4, 5 * N_ALT + 5, 20, (N_ALT + 1) * 2, 20]
     fe = CustomFeatureEstimator(feature_names, directory)
-    features = fe.load_features()
-    labels = fe.load_labels()
     data = get_cwi_data(filename)
+    features = fe.load_features(phrase_features=True, data=data)
+    labels = fe.load_labels()
     if len(data) != len(features):
         exit(-1)
     for i in range(to_print):
@@ -720,7 +832,7 @@ def create_features():
                      "testset/english/WikiNews_Test_Features/",
                      "testset/english/Wikipedia_Test_Features/"]
     for i in range(len(originals)):
-        fe = CustomFeatureEstimator(["word_syllab", "sent_syllab"], "/home/nlp/wpred/datasets/cwi/" + folders[i])
+        fe = CustomFeatureEstimator(["wv_cosines"], "/home/nlp/wpred/datasets/cwi/" + folders[i])
         # fe = CustomFeatureEstimator(["lexicon"])
         fe.calculate_features(get_cwi_data("/home/nlp/wpred/datasets/cwi/" + originals[i]))
     """fe = CustomFeatureEstimator(["POS", "word_length", "wv", "word_syllab",
@@ -736,6 +848,6 @@ def create_features():
 
 
 if __name__ == "__main__":
-    create_features()
+    # create_features()
     report("/home/nlp/wpred/datasets/cwi/traindevset/english/News_Train.tsv",
           "/home/nlp/wpred/datasets/cwi/traindevset/english/News_Train_Features/")

@@ -1,167 +1,200 @@
 import copy
 
 import src.cwi.generate_features as gf
-import src.classpaths as paths
 import numpy as np
+from sklearn.neural_network import MLPClassifier
 from sklearn.neighbors.nearest_centroid import NearestCentroid
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score
 from sklearn.metrics import precision_recall_fscore_support
-from sklearn.metrics import classification_report
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import AdaBoostClassifier
 
-cwi = True
-wv = True
+USE_WORD_VECTORS = True
 
-flist = ["News_Dev.tsv","News_Train.tsv","News_Test.tsv",
-         "WikiNews_Dev.tsv","WikiNews_Train.tsv","WikiNews_Test.tsv",
-         "Wikipedia_Dev.tsv","Wikipedia_Train.tsv","Wikipedia_Test.tsv"]
+CL_TYPES = ["AdaBoost", "Nearest Centroid", "Linear Regression", "Neural Network"]
+CL_TYPE = CL_TYPES[3]
+
+DATASETS = ["News_Dev.tsv", "News_Train.tsv", "News_Test.tsv",
+         "WikiNews_Dev.tsv", "WikiNews_Train.tsv", "WikiNews_Test.tsv",
+         "Wikipedia_Dev.tsv", "Wikipedia_Train.tsv", "Wikipedia_Test.tsv"]
+# the list of filenames with different datasets
+FEATURES_TO_USE = ["is_a_phrase", "word_length", "vowel_count", "word_syllab", "punctuation",
+        "1-gram", "5-gram", "POS", "2-gram", "3-gram", "4-gram",
+        "sent_syllab", "word_count", "hit", "lexicon", "mean_word_length"]
+# Note that "wv" should always come the last and "is_a_phrase" must always
+# be the first in teh list
+if USE_WORD_VECTORS:
+    FEATURES_TO_USE += ["wv_cosines", "wv"]
 
 
-def train_classifier(x,y):
-
-    print("training")
-    # clf = NearestCentroid(shrink_threshold=1.)
-    clf = AdaBoostClassifier(
-        RandomForestClassifier(max_depth=2,max_features=None),
-        n_estimators = 500,
-        learning_rate=1)
-    clf.fit(x,y)
+def train_classifier(x, y):
+    """
+    Train a classifier
+    :param x: features to train on
+    :param y: labels to train on
+    :return:  created classifier
+    """
+    if CL_TYPE == "Neural Network":
+        clf = MLPClassifier(hidden_layer_sizes=(100, 10), early_stopping=True, learning_rate_init=0.0001)
+    elif CL_TYPE == "Linear Regression":
+        clf = LogisticRegression(multi_class='ovr')
+    elif CL_TYPE == "AdaBoost":
+        depth = 3
+        n_estimators=500
+        print(depth, n_estimators)
+        clf = AdaBoostClassifier(
+            RandomForestClassifier(max_depth=depth, max_features=None),
+            n_estimators=n_estimators, learning_rate=1)
+    elif CL_TYPE == "Nearest Centroid":
+        clf = NearestCentroid(shrink_threshold=1.)
+    else:
+        print("Unknown classifier type")
+        exit(-1)
+    clf.fit(x, y)
     return clf
 
-def test_classifier(clf,x,y,multiword=[]):
+
+def test_classifier(clf, x, y, multiword, clf_phrase=None):
+    """
+    Test a classifier
+    :param clf:       the classifier to test
+    :param x:         testing set features
+    :param y:         testing set labels
+    :param multiword: an array that stores 1, if the target sample is a phrase
+    and 0 otherwise.
+    :param clf_phrase: classifier to use for phrases
+    :return: None
+    """
     pred = clf.predict(x)
     for i in range(len(multiword)):
         if multiword[i] == 1:
-            pred[i] = 1 # force multiword to complex
+            if clf_phrase is None:
+                pred[i] = 1
+            else:
+                pred[i] = clf_phrase.predict([x[i]])
 
-    print(precision_recall_fscore_support(y,pred, average='macro'))
-    print(f1_score(y,pred))
-    print(classification_report(y,pred))
+    precision, recall, fscore, _ = precision_recall_fscore_support(y, pred, average='macro')
+    fscore_verified = f1_score(y, pred, average='macro')
+    print("Precision: " + str(round(precision, 4)) +
+          ", Recall: " + str(round(recall, 4)) +
+          ", F-Score: " + str(round(fscore, 4)))
+    if fscore != fscore_verified:
+        print("Note that for some reason there is a difference in F-scores. "
+              "The other possible value is: " + str(round(fscore_verified, 4)))
 
 
 def load_dataset(num):
-    f =  flist[num]
-    # create directory if necessary
-    root = f[:-4]
+    """
+    Load the data from a particular dataset into memory
+    :param num: the index of the dataset in the DATASETS array
+    :return:    features, labels
+    """
+    f = DATASETS[num]
+    root = "/home/nlp/wpred/datasets/cwi/"
     if (num + 1) % 3 == 0:
-        feature_file = "testset/english/" + root + "_Features"
+        # if this is part of the testing set
+        feature_file = root + "testset/english/" + f
+        feature_dir = root + "testset/english/" + f[:-4] + "_Features/"
     else:
-        feature_file = "traindevset/english/" + root + "_Features"
-    print(feature_file)
-    feature_names = [
-        "labels",
-        "word_length","vowel_count","word_syllab",
-        "hit" ,"1-gram", "5-gram", "POS", "2-gram", "3-gram", "4-gram",
-        "sent_syllab", "word_count", "lexicon", "mean_word_length", "punctuation"
-    ]
-    if wv:
-        feature_names += ["wv"]
-    fe = gf.CustomFeatureEstimator(feature_names, "/home/nlp/wpred/datasets/cwi/" + feature_file + "/")
-    features = fe.load_features()
+        feature_file = root + "traindevset/english/" + f
+        feature_dir = root + "traindevset/english/" + f[:-4] + "_Features/"
+    data = gf.get_cwi_data(feature_file)
+    fe = gf.CustomFeatureEstimator(FEATURES_TO_USE, feature_dir)
+    features = fe.load_features(phrase_features=True, data=data)
     labels = fe.load_labels()
-    return (features,labels)
+    return features, labels
 
-def fix_data(features,labels,scaler=None):
-    '''Fix up details of the features:
+
+def fix_data(features, labels, scaler=None):
+    """
+    PRECONDITION: Word Vectors should come last in the list of features
+    Fix up details of the features:
     0. Note all multi-word targets.
-    1. Convert hit/count to hit-frequency.
-    2. Set 5-gram zeros to 1.
-    3. Normalize 5-grams by total count (pseudo-freq)
-    4. z-score scale all features.
-    5. Keep only last column in 5-grams.
-    '''
-    # Convert hit (features 3+4) to a frequency
-    multi_word = [ ]
-    ismultiword = np.zeros(len(labels))
-    for i in range(len(features)): # remove multi-word targets
-        if features[i][0] < 1:
-            multi_word.append(i)
-            ismultiword[i] = 1 # flag it as multiword
-    if wv:
-        if scaler == None:
-            scaler=StandardScaler()
+    1. z-score scale all features except for the wordvectors
+    :param features: features to scale
+    :param labels:   labels that correspond to these features
+    :param scaler:   scaler to use to scale the features.
+                     Create a new on, if scaler = None
+    :return: scaler, features, labels, features_for_one_word_targets_only,
+    labels_for_one_word_targets_only, features_phrase, labels_phrase, is_a_phrase?_array
+    """
+    ismultiword = [f[0] for f in features]
+    multi_word = np.array([i for i in range(len(ismultiword)) if ismultiword[i] == 1])
+    one_word = np.array(
+        [i for i in range(len(ismultiword)) if ismultiword[i] == 0])
+    features = [f[1:] for f in features]
+    if USE_WORD_VECTORS:
+        # word vectors should not be scaled
+        if scaler is None:
+            scaler = StandardScaler()
             scaler.fit([f[:-500] for f in features])
         oldfeatures = copy.deepcopy(features)
         features = scaler.transform([f[:-500] for f in oldfeatures])
         features = [np.concatenate((features[i], oldfeatures[i][-500:])) for i in range(len(features))]
     else:
-        if scaler == None:
+        if scaler is None:
             scaler = StandardScaler()
             scaler.fit(features)
         features = scaler.transform(features)
-    oneword_features = np.delete(features,multi_word,0)
-    oneword_labels = np.delete(labels,multi_word,0)
-    return (scaler,features,labels,oneword_features,oneword_labels,ismultiword)
-
+    oneword_features = np.delete(features, multi_word, 0)
+    oneword_labels = np.delete(labels, multi_word, 0)
+    multi_features = np.delete(features, one_word, 0)
+    multi_labels = np.delete(labels, one_word, 0)
+    return scaler, features, labels, oneword_features, oneword_labels, multi_features, multi_labels, ismultiword
 
 
 def main():
-    if cwi:
-        for idx in [0,3,6]:
-            print("\n\nDataset %s" % flist[idx])
-            scaler = None
+    """
+    Evaluate the performance of a model/features on different datasets
+    :return:
+    """
+    print("Classifier used: " + CL_TYPE)
+    if FEATURES_TO_USE[0] != "is_a_phrase":
+        print("Word length feature should always be the first in the feature list")
+        exit(-1)
+    print("Are word vectors used? - " + str(USE_WORD_VECTORS))
+    print("All the features used: " + str(FEATURES_TO_USE))
 
-            (ftrs,lbls) = load_dataset(idx+1)
-            (ftrsdev,lblsdev) = load_dataset(idx+0)
+    for idx in [0, 3, 6]:
+        print("Processing Dataset: " + ', '.join(DATASETS[idx: idx + 3]))
 
-            print( "shapes",ftrs.shape,ftrsdev.shape)
-            ftrs = np.concatenate((ftrs,ftrsdev))
-            lbls = np.concatenate((lbls,lblsdev))
+        features, labels = load_dataset(idx+1)
+        features_dev, labels_dev = load_dataset(idx+0)
 
-            (scaler,ftrs,lbls,oftrs,olbls,mword) = fix_data(ftrs,lbls,scaler)
+        print("Shapes of the features: " + str(features.shape)
+              + " (training), " + str(features_dev.shape) + " (dev)")
+        features = np.concatenate((features, features_dev))
+        labels = np.concatenate((labels, labels_dev))
 
-            print("Num targets %d" % len(lbls))
-            print("Num removed multi-word targets %d"% (len(lbls)-len(olbls)))
-            #print features
-            #data = get_cwi_data()
-            #result.append(numpy.load(FEATURE_DIR + feature["name"] + ".npy"))
+        scaler, features, labels, oneword_features, oneword_labels, phrase_features, phrase_labels, _ = \
+            fix_data(features, labels, None)
 
-            # clf_o = train_classifier(oftrs,olbls) # model for one-word only
-            clf = train_classifier(ftrs,lbls) # model for all targets
-            # one word targets
-            """print("-----------------TRAIN--------------------")
-            print("---------------All targets------")
-            test_classifier(clf,ftrs,lbls,multiword=mword)
-            print("---------------One-word targets------")
-            test_classifier(clf_o,oftrs,olbls)"""
+        print("Num removed multi-word samples %d" % (len(features)-len(oneword_features)))
 
-            # testing data
-            (ftrs,lbls) = load_dataset(idx+2)
-            (scaler,ftrs,lbls,oftrs,olbls,mword) = fix_data(ftrs,lbls,scaler)
+        print("Trainig common classifier: ")
+        clf = train_classifier(features, labels)
+        print("Trainig word-specific classifier: ")
+        clf_oneword = train_classifier(oneword_features, oneword_labels)
+        print("Trainig phrase-specific classifier: ")
+        clf_phrase = train_classifier(phrase_features, phrase_labels)
 
-            print("-----------------TEST--------------------")
-            print("Num targets %d" % len(lbls))
-            print("Num removed multi-word targets %d"% (len(lbls)-len(olbls)))
+        # testing data
+        features_test, labels_test = load_dataset(idx+2)
+        _, features_test, labels_test, oneword_features, _, _, _, is_multi_word = \
+            fix_data(features_test, labels_test, scaler)
 
-            print("---------------All targets------")
-            test_classifier(clf,ftrs,lbls,multiword=mword)
-            """print("---------------One-word targets------")
-            test_classifier(clf_o,oftrs,olbls)"""
-    else:
-        fe = gf.CustomFeatureEstimator([
-            "labels",
-            "word_length", "vowel_count", "word_syllab", "1-gram", "5-gram", "POS",
-            "sent_syllab", "word_count", "lexicon", "mean_word_length", "punctuation",
-        ], "/home/nlp/wpred/datasets/kriz/")
-        features = fe.load_features()
-        labels = fe.load_labels()
+        print("Num targets %d" % len(features_test))
+        print("Num removed multi-word targets %d"% (len(features_test)-len(oneword_features)))
 
-        test =  int(len(features) / 10)
-
-        for i in range(10):
-            testing_set = [features[i * test:(i + 1) * test], labels[i * test:(i + 1) * test]]
-            training_set = [np.concatenate((features[:i * test], features[(i + 1) * test:])), np.concatenate((labels[:i * test], labels[(i + 1) * test:]))]
-            scaler = StandardScaler()
-            scaler.fit(training_set[0])
-            training_set[0] = scaler.transform(training_set[0])
-            testing_set[0] = scaler.transform(testing_set[0])
-            clf = train_classifier(training_set[0], training_set[1])  # model for all targets
-            test_classifier(clf, testing_set[0], testing_set[1])
-
-
-
+        print("Testing scores when marking all phrases as complex: ")
+        test_classifier(clf_oneword, features_test, labels_test, is_multi_word, clf_phrase=None)
+        print("Testing scores using a common classifier: ")
+        test_classifier(clf, features_test, labels_test, is_multi_word, clf_phrase=clf)
+        print("Testing scores using phrase classifier to predict phrases: ")
+        test_classifier(clf_oneword, features_test, labels_test, is_multi_word,
+                        clf_phrase=clf_phrase)
 
 
 if __name__ == "__main__":

@@ -161,6 +161,10 @@ def evaluate(prefix, epochs):
 
             lst = []
 
+            print(model.predict_output_word(['You_P', 'made_V', 'a_DT' 'mistake_N'], topn=50))
+            print(model.predict_output_word(
+                ['horses_N', 'battle_N', 'king_N' 'killed_V'], topn=50))
+
             for w0 in ['train_N', 'train_V']:
                 lst += [x[0] for x in model.wv.most_similar(positive=[w0], topn=2)]
 

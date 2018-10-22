@@ -57,7 +57,7 @@ def tag_data(lines):
 
 def verify_data(lines, lines_tagged):
     """
-    Get the lines from the Chris paper and teh lines from the tagged versino of
+    Get the lines from the Chris paper and the lines from the tagged versino of
     the same data and return a list of words (one per line) in a form that
     should be accepted by the model
     :param lines:
@@ -66,55 +66,54 @@ def verify_data(lines, lines_tagged):
     """
     final_lines = []
     for i in range(len(lines)):
-        if not lines[i]['words']:
-            final_lines.append('PHRASE')
-            continue
-        word = lines[i]['words'][0].lower()
-        ind = lines[i]['inds'][0]
-        line = lines[i]['sent'].lower()
-        if re.match('.*f331e.s3.amazonaws.com.*?&gt ; .*', line) and ind > 0:
-            ind -= 20
-        line = re.sub('.*f331e.s3.amazonaws.com.*?&gt ; ', '', line).split(' ')
-        line_tagged = lines_tagged[i].rstrip('\n').lower()
-        line_tagged = re.sub('.*f331e.s3.amazonaws.com.*?&_cc gt_nn ;_: ', '',
-                             line_tagged)
-        line_tagged = re.sub('a\.m\._nn \._\.', 'a.m._nn',
-                             line_tagged)
-        line_tagged = re.sub('d-ill_nnp \._\.', 'd_ill._nnp',
-                             line_tagged)
-        line_tagged = re.sub('\xc2\xa0', ' ', line_tagged)
-        line_tagged = re.sub('u\.s_nnp \._\.', 'u.s._nnp', line_tagged).split(
-            ' ')
-        if '\xa0' in line:
-            line_tagged.insert(line.index('\xa0'), '\xa0')
-        if len(line) != len(line_tagged):
-            line_tagged = re.sub(r' `_`` (s|re|ll|d|ve|m|60s|t|80s|40s)_',
-                                 r' `\1_', ' '.join(line_tagged)).split(' ')
+        final_lines.append([])
+        words = lines[i]['sent'].lower().split(' ')
+        words = [(words[j], j) for j in range(len(words))]
+        if not lines[i]['phrase']:
+            words.append((lines[i]['words'][0].lower(), lines[i]['inds'][0]))
+        for word, ind in words:
+            line = lines[i]['sent'].lower()
+            if re.match('.*f331e.s3.amazonaws.com.*?&gt ; .*', line) and ind > 0:
+                ind -= 20
+            line = re.sub('.*f331e.s3.amazonaws.com.*?&gt ; ', '', line).split(' ')
+            line_tagged = lines_tagged[i].rstrip('\n').lower()
+            line_tagged = re.sub('.*f331e.s3.amazonaws.com.*?&_cc gt_nn ;_: ',
+                                 '', line_tagged)
+            line_tagged = re.sub('a\.m\._nn \._\.', 'a.m._nn', line_tagged)
+            line_tagged = re.sub('d-ill_nnp \._\.', 'd_ill._nnp', line_tagged)
+            line_tagged = re.sub('\xc2\xa0', ' ', line_tagged)
+            line_tagged = re.sub('u\.s_nnp \._\.', 'u.s._nnp',
+                                 line_tagged).split(' ')
+            if '\xa0' in line:
+                line_tagged.insert(line.index('\xa0'), '\xa0')
             if len(line) != len(line_tagged):
-                # print(line)
-                # print(line_tagged)
-                # print("Line lengths are unequal! ln:" + str(i))
-                final_lines.append(get_tag_brute_force(line_tagged, word))
-                continue
-        if word != line[ind]:
-            if word == line[ind - 2]:
-                ind -= 2
-            else:
-                # print(word)
-                # print(line[ind])
-                # print(line)
-                # print("Inconsistency withing the line!" + str(i))
-                final_lines.append(get_tag_brute_force(line_tagged, word))
-                continue
-        if word != '_'.join(line_tagged[ind].split('_')[:-1]):
-            if re.sub('&amp;', '&', word) != '_'.join(
-                    line_tagged[ind].split('_')[:-1]):
-                # print("Inconsistency withing the tagged line!")
-                final_lines.append(get_tag_brute_force(line_tagged, word))
-                continue
-        tag = line_tagged[ind].split('_')[-1].upper()
-        tag = getGeneralisedPOS(tag)
-        final_lines.append(tag)
+                line_tagged = re.sub(r' `_`` (s|re|ll|d|ve|m|60s|t|80s|40s)_',
+                                     r' `\1_', ' '.join(line_tagged)).split(' ')
+                if len(line) != len(line_tagged):
+                    # print(line)
+                    # print(line_tagged)
+                    # print("Line lengths are unequal! ln:" + str(i))
+                    final_lines[i].append(get_tag_brute_force(line_tagged, word))
+                    continue
+            if word != line[ind]:
+                if word == line[ind - 2]:
+                    ind -= 2
+                else:
+                    # print(word)
+                    # print(line[ind])
+                    # print(line)
+                    # print("Inconsistency withing the line!" + str(i))
+                    final_lines[i].append(get_tag_brute_force(line_tagged, word))
+                    continue
+            if word != '_'.join(line_tagged[ind].split('_')[:-1]):
+                if re.sub('&amp;', '&', word) != '_'.join(
+                        line_tagged[ind].split('_')[:-1]):
+                    # print("Inconsistency withing the tagged line!")
+                    final_lines[i].append(get_tag_brute_force(line_tagged, word))
+                    continue
+            tag = line_tagged[ind].split('_')[-1].upper()
+            tag = getGeneralisedPOS(tag)
+            final_lines[i].append(tag)
     return final_lines
 
 
@@ -190,17 +189,26 @@ def get_tag_brute_force(sent, word):
         word = re.sub('[^a-z]', '', word)
         if word in ['nt']:
             return "RB"
-        if word in ['euros', 'songkhla', 'opinions']:
-            return 'NNS'
-        if word in ['selfmedicating', 'thoseaffected']:
-            return 'JJ'
-        if word in ['ve']:
-            return 'VBD'
-        print(word)
+        if word in ['euros', 'songkhla', 'opinions', 'obamas', 'madness', 'sv',
+                    'life', 'area', 'region', 'partners', 'home', 'jurisdictions',
+                    'lebanon', 'theater', 'stuffing', 'time', 'afghanistans',
+                    'circle', 'worlds', 'apples', 'sunday']:
+            return 'N'
+        if word in ['selfmedicating', 'thoseaffected', 'affected', 'illegitimate']:
+            return 'J'
+        if word in ['ve', 'im', 'theyre', 'is', 'weve', 'were', 'come', 'doesnt',
+                    'begins', 'dont']:
+            return 'V'
+        if word in ['a']:
+            return 'DT'
+        if word in ['me']:
+            return 'P'
+        if re.match('.*[a-z].*', word):
+            print(word)
         return "BAD" + "-" * 100
     word_id = sent.index(word)
     tag = re.sub(r'.*?_(.*?) .*', r'\1', sent[word_id:]).upper()
-    print(word, tag)
+    # print(word, tag)
     return getGeneralisedPOS(tag)
 
 
