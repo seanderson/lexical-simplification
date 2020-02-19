@@ -18,3 +18,4 @@ word2vecmodels/*
 .idea/
 *.DS_STORE
 ghpaetzold-MorphAdornerToolkit-44bb87d/*
+*.npy

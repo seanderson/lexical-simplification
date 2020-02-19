@@ -5,7 +5,8 @@ from nltk.stem import WordNetLemmatizer
 from src.classpaths import *
 from src.word2vec.word2vecpos import EpochSaver
 import gensim
-
+from datamuse import datamuse
+api = datamuse.Datamuse()
 
 Lemmatizer = WordNetLemmatizer()
 GOOGLE_NGRAM = "GOOGLE"
@@ -16,7 +17,7 @@ model = None
 # current model is trained with vectors of size 500, window = 5
 # alpha = 0.01, min_alpha = 1.0e-9, negative sampling = 5. The third epoch is
 # taken because it shows the best score on SimLex-999
-EMB_SIZE = 500
+EMB_SIZE = 200
 N_ALT = 0
 # the number of substitution candidates to add (the substitutions are chosen
 # from the nearest word vecors that bear the same POS tag). This constant should
@@ -32,14 +33,16 @@ MAX_WORDS_PER_SENTENCE = 200  # used inside the POS_ALL feature
 
 class CustomFeatureEstimator:
 
-    TAG_TO_NUM = {'A': 5, 'MD': 2, 'PDT': 9, 'RP': 8, 'IN': 6, '-RRB-': 7,
+    """TAG_TO_NUM = {'A': 5, 'MD': 2, 'PDT': 9, 'RP': 8, 'IN': 6, '-RRB-': 7,
                   'CC': 11, 'LS': 17, 'J': 3, 'SYM': 18, 'N': 1, 'P': 12,
                   'UH': 16, 'W': 15, 'V': 19, '-LRB-': 13, 'DT': 10, 'CD': 4,
-                  'FW': 14, 'PHRASE': 0, '.': 21, 'TO': 22, ',': 20}
-    NUM_TO_TAG = {0: 'PHRASE', 1: 'N', 2: 'MD', 3: 'J', 4: 'CD', 5: 'A',
+                  'FW': 14, 'PHRASE': 0, '.': 21, 'TO': 22, ',': 20}"""
+    """NUM_TO_TAG = {0: 'PHRASE', 1: 'N', 2: 'MD', 3: 'J', 4: 'CD', 5: 'A',
                   6: 'IN', 7: '-RRB-', 8: 'RP', 9: 'PDT', 10: 'DT', 11: 'CC',
                   12: 'P', 13: '-LRB-', 14: 'FW', 15: 'W', 16: 'UH', 17: 'LS',
-                  18: 'SYM', 19: 'V', 20: ',', 21: '.', 22: 'TO'}
+                  18: 'SYM', 19: 'V', 20: ',', 21: '.', 22: 'TO'}"""
+    TAG_TO_NUM = {'PHRASE': 0, 'A': 1, 'J': 2, 'N': 3, 'V': 4}
+    NUM_TO_TAG = {0: 'PHRASE', 1: 'A', 2: 'J', 3: 'N', 4: 'V'}
 
     NUMBER_OF_POS_TAGS = len(TAG_TO_NUM.keys())
 
@@ -85,8 +88,10 @@ class CustomFeatureEstimator:
             "punctuation": {"func": self.punctuation_feature, "dep": []},
             "mean_word_length": {"func": self.mean_word_length_feature,
                                  "dep": ["word_count"]},
-            "synset_count": {"func": self.synset_count_feature, "dep": []},
-            "synonym_count": {"func": self.synonym_count_feature, "dep": []},
+            "hyponym_count": {"func": lambda x: self.wordnet_feature(x, "hypo"), "dep": []},
+            "hypernym_count": {"func": lambda x: self.wordnet_feature(x, "hyper"), "dep": []},
+            "synset_count": {"func": lambda x: self.wordnet_feature(x, "synset"), "dep": []},
+            "synonym_count": {"func": lambda x: self.wordnet_feature(x, "synonym"), "dep": []},
             "labels": {"func": self.get_labels, "dep": []},
             "wv": {"func": self.word_embeddings_feature, "dep": ["POS"]},
             "hit": {"func": self.hit_freqency_feature, "dep": ["word_count"]},
@@ -311,10 +316,11 @@ class CustomFeatureEstimator:
         return [numpy.array([len(re.sub('[^a-zA-Z]', '', data[i]['sent'])) /
                              self.results['word_count'][i][0]]) for i in range(len(data))]
 
-    def synset_count_feature(self, data):
+    def wordnet_feature(self, data, feature):
         """
-        Calculate the numer of wordnet synsets for each target word
+        Extract a wordnet feature
         :param data: See the entry for calculate_features
+        :feature: hypo, hyper, synset or synonym
         :return:
         """
         dict = {}
@@ -324,38 +330,29 @@ class CustomFeatureEstimator:
             for j in range(len(line['words'])):
                 word = line['words'][j].lower()
                 if word not in dict:
-                    try:
-                        dict[word] = len(wn.synsets(word))
-                    except UnicodeDecodeError:
-                        dict[word] = 0
-                result[-1][j] = dict[word]
-        return result
-
-    def synonym_count_feature(self, data):
-        """
-        Calculate the numer of wordnet synonyms for each target word
-        :param data: See the entry for calculate_features
-        :return:
-        """
-        dict = {}
-        result = []
-        for line in data:
-            result.append(numpy.zeros(N_ALT + 1))
-            for j in range(len(line['words'])):
-                word = line['words'][j].lower()
-                if word not in dict:
-                    synonyms = {}
                     try:
                         senses = wn.synsets(word)
                     except UnicodeDecodeError:
-                        senses = []
-                    dict[word] = 0
-                    for sense in senses:
-                        for lemma in sense.lemmas():
-                            lemma = re.sub('.*\.', '', str(lemma))
-                            if lemma not in synonyms:
-                                synonyms[lemma] = True
-                                dict[word] += 1
+                        dict[word] = 0
+                    if feature == "synset":
+                        dict[word] = len(senses)
+                    elif feature in ["hypo", "hyper", "synonym"]:
+                        encountred = {}
+                        dict[word] = 0
+                        for sense in senses:
+                            if feature == "hypo":
+                                iterate_through = sense.hyponyms()
+                            elif feature == "hyper":
+                                iterate_through = sense.hypernyms()
+                            else:
+                                iterate_through = [re.sub('.*\.', '', str(lemma)) for lemma in sense.lemmas()]
+                            for entry in iterate_through:
+                                if entry not in encountred:
+                                    encountred[entry] = True
+                                    dict[word] += 1
+                    else:
+                        print("Problem")
+                        exit(-1)
                 result[-1][j] = dict[word]
         return result
 
@@ -405,13 +402,15 @@ class CustomFeatureEstimator:
             if data[i]['phrase']:
                 result.append(numpy.zeros(EMB_SIZE))
                 continue
-            if self.results['POS'][i][0] not in self.NUM_TO_TAG:
-                print("Problem")
+            tag_id = self.results['POS_ALL'][i][len(data[i]['sent'].split(' '))]
+            if tag_id in self.NUM_TO_TAG:
+                tag = self.NUM_TO_TAG[tag_id]
+            else:
+                result.append(numpy.zeros(EMB_SIZE))
                 continue
-            tag = self.NUM_TO_TAG[self.results['POS'][i][0]]
             target = data[i]['words'][0].lower() + '_' + tag
             result.append([])
-            if target not in model.vocab:
+            if target not in model.wv.vocab:
                 result[-1].append(numpy.zeros(EMB_SIZE * (N_ALT + 1) + N_ALT))
                 file.write('\n')
             else:
@@ -785,13 +784,14 @@ def report(filename, directory, to_print=100):
     Print a sample of features for different words
     :return:
     """
-    feature_names = ["POS_ALL", "POS", "is_a_phrase", "hit", "sent_syllab", "word_length",
+    feature_names = ["hypernym_count", "hyponym_count", "POS_ALL", "POS", "is_a_phrase", "hit", "sent_syllab", "word_length",
                                  "word_syllab", "word_count", "punctuation",
                                  "mean_word_length", "synset_count",
                                  "synonym_count", "vowel_count", "1-gram",
                                  "2-gram", "3-gram", "4-gram", "5-gram",
                                  "lexicon", "wv_cosines",  "wv", "labels"]
-    feature_sizes = [MAX_WORDS_PER_SENTENCE, (N_ALT + 1) * (CustomFeatureEstimator.NUMBER_OF_POS_TAGS + 1),
+    feature_sizes = [N_ALT + 1, N_ALT + 1,
+                     MAX_WORDS_PER_SENTENCE, (N_ALT + 1) * (CustomFeatureEstimator.NUMBER_OF_POS_TAGS + 1),
                      1, N_ALT + 1, 1, N_ALT + 1, N_ALT + 1, 1, 1, 1,
                      N_ALT + 1, N_ALT + 1, N_ALT + 1, N_ALT + 1, 2 * N_ALT + 2,
                      3 * N_ALT + 3, 4 * N_ALT + 4, 5 * N_ALT + 5, 20, (N_ALT + 1) * 2, 20]
@@ -832,7 +832,7 @@ def create_features():
                      "testset/english/WikiNews_Test_Features/",
                      "testset/english/Wikipedia_Test_Features/"]
     for i in range(len(originals)):
-        fe = CustomFeatureEstimator(["wv_cosines"], "/home/nlp/wpred/datasets/cwi/" + folders[i])
+        fe = CustomFeatureEstimator(["POS_ALL", "POS", "wv", "wv_cosines"], "/home/nlp/wpred/datasets/cwi/" + folders[i])
         # fe = CustomFeatureEstimator(["lexicon"])
         fe.calculate_features(get_cwi_data("/home/nlp/wpred/datasets/cwi/" + originals[i]))
     """fe = CustomFeatureEstimator(["POS", "word_length", "wv", "word_syllab",
@@ -848,6 +848,6 @@ def create_features():
 
 
 if __name__ == "__main__":
-    # create_features()
-    report("/home/nlp/wpred/datasets/cwi/traindevset/english/News_Train.tsv",
-          "/home/nlp/wpred/datasets/cwi/traindevset/english/News_Train_Features/")
+    create_features()
+    report("/home/nlp/wpred/datasets/cwi/traindevset/english/News_Dev.tsv",
+          "/home/nlp/wpred/datasets/cwi/traindevset/english/News_Dev_Features/")
